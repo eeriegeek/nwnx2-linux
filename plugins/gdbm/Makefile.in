@@ -1,0 +1,22 @@
+NWNXDIR  = ../..
+CPPFLAGS = $(PLUGIN_CPPFLAGS) -I$(NWNXDIR)
+LFLAGS   = $(PLUGIN_LFLAGS)
+
+LIBS     = -lgdbm
+
+all: nwnx_gdbm.so gdbm2dump
+
+nwnx_gdbm.so: NWNXgdbm.o plugin-gdbm.o
+	$(CXX) $(LFLAGS) -o $@ $^ $(LIBS)
+
+gdbm2dump: gdbm2dump.cpp
+	$(CXX) -o $@ $^ $(LIBS)
+
+clean:
+	/bin/rm -f *.o *.so *~ gdbm2dump
+
+distclean: clean
+	/bin/rm -f Makefile
+
+install: nwnx_gdbm.so gdbm2dump
+	mkdir -p @prefix@/ ; install nwnx_gdbm.so @prefix@/
