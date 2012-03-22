@@ -13,6 +13,7 @@ add_module(system NWNXSystem plugin-system
 	funcs/f_FileDelete
 	funcs/f_FileReadAll
 	funcs/f_FileRename
+	funcs/f_FileSize
 	funcs/f_FileSymlink
 	funcs/f_GetProcessCPUUsage
 	funcs/f_GetProcessMemoryUsage

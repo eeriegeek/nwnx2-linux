@@ -39,6 +39,7 @@ FILEDELETE,                             Func_FileDelete
 FILELINK,                               Func_FileLink
 FILEREADALL,                            Func_FileReadAll
 FILERENAME,                             Func_FileRename
+FILESIZE,                               Func_FileSize
 FILESYMLINK,                            Func_FileSymlink
 GETPROCESSCPUUSAGE,                     Func_GetProcessCPUUsage
 GETPROCESSMEMORYUSAGE,                  Func_GetProcessMemoryUsage

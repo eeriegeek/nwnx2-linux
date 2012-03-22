@@ -23,6 +23,9 @@ int FileLink (string sFrom, string sTo);
 /* Rename the file sFrom to sTo. Returns >0 on success. */
 int FileRename (string sFrom, string sTo);
 
+/* Get the file size in bytes. */
+int FileSize (string sFile);
+
 /* Symlink the file sFrom to sTo. Returns >0 on success. */
 int FileSymlink (string sFrom, string sTo);
 
@@ -98,6 +101,11 @@ int FileDelete (string sFile) {
 int FileRename (string sFrom, string sTo) {
     SetLocalString(GetModule(), "NWNX!SYSTEM!FILERENAME", sFrom + "\n" + sTo);
     return StringToInt(GetLocalString(GetModule(), "NWNX!SYSTEM!FILERENAME"));
+}
+
+int FileSize (string sFile) {
+    SetLocalString(GetModule(), "NWNX!SYSTEM!FILESIZE", sFile);
+    return StringToInt(GetLocalString(GetModule(), "NWNX!SYSTEM!FILESIZE"));
 }
 
 int FileSymlink (string sFrom, string sTo) {

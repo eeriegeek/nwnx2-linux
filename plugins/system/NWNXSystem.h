@@ -34,6 +34,7 @@ void Func_FileDelete                         (CGameObject *ob, char *value);
 void Func_FileLink                           (CGameObject *ob, char *value);
 void Func_FileReadAll                        (CGameObject *ob, char *value);
 void Func_FileRename                         (CGameObject *ob, char *value);
+void Func_FileSize                           (CGameObject *ob, char *value);
 void Func_FileSymlink                        (CGameObject *ob, char *value);
 void Func_GetProcessCPUUsage                 (CGameObject *ob, char *value);
 void Func_GetProcessMemoryUsage              (CGameObject *ob, char *value);
