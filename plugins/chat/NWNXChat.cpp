@@ -74,7 +74,7 @@ bool CNWNXChat::OnCreate (gline *config, const char* LogDir)
 	}
     servScript[16] = 0;
     int maxLen = atoi((*nwnxConfig)[confKey]["max_msg_len"].c_str());
-    if (maxLen) maxMsgLen = maxLen;
+    if (maxLen>0) maxMsgLen = maxLen;
     int logNPC = atoi((*nwnxConfig)[confKey]["processnpc"].c_str());
     if (logNPC) processNPC = logNPC;
 	int ignoreS = atoi((*nwnxConfig)[confKey]["ignore_silent"].c_str());
@@ -87,7 +87,7 @@ bool CNWNXChat::OnCreate (gline *config, const char* LogDir)
   Log (1, "cc_script: %s\n", ccScript);
   Log (1, "max_msg_len: %d\n", maxMsgLen);
   Log (1, "processnpc: %d\n", processNPC);
-  Log (1, "ignore_silent: %d\n\n", processNPC);
+  Log (1, "ignore_silent: %d\n\n", ignore_silent);
 
   return (HookFunctions());
 }
