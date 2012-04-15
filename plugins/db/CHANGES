@@ -1,0 +1,45 @@
+2.0.0b1 - 13.04.2012
+----
+* added prepared statement support to mysql & pgsql
+* added NULL and empty string handling
+* added typed getter methods (including object) 
+* added all character safe support in strings
+* added native database string escaping
+* added method to get database type in the application
+* added multi-query support to mysql & pgsql (basic interface)
+* added multi-result set support to mysql
+* added dynamic result size support (except blobs)
+* separated interfaces for database and serialization
+* added new db and serializer nwscript api
+
+1.0.0 - 2010-11-07
+----
+* New configuration parameters: 'socket' and 'port'
+* Added object storage for placeables, stores and triggers
+
+0.3.2 - 2008-01-23
+----
+* Added optional PostgreSQL support
+
+0.3.1 - 2007-02-08
+----
+* Fixed GCC 4.* compiling issue.
+* Added optional SQLite support
+* Fixed possible memory leak
+* Added 'charset' ini option
+
+
+0.3 - 2006-08-10
+----
+* The plugin now uses "pass" or "pwd" config key for password
+* RCO uses its own result set, so you can do something like that:
+SQLExec("SELECT id, stackable, stacksize FROM ax_bank_items WHERE cid="+IntToString(nID));
+while(SQLFetch())
+{
+	sItemID = SQLGet(1);
+	bStackable = StringToInt(SQLGet(2));
+	SQLSCORCOExec("SELECT data FROM ax_bank_items WHERE id="+sItemID);
+	oTmp = SQLRetrieveObject(lLoc, OBJECT_SELF);
+	...
+}
+without breaking the main loop.
