@@ -1,0 +1,50 @@
+-------------------------------------------------------------------------------
+NWNX DB Plugin README
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+Building
+-------------------------------------------------------------------------------
+
+To compile SQLite3 support:
+- install the relevant libraries and headers:
+  on debian-likes: apt-get install libsqlite3-0 libsqlite3-dev
+  on fedora-likes: yum install sqlite sqlite-devel
+- pass DB_SQLITE=1 to make, cmake will build support if libraries are installed
+
+To compile MySQL support:
+- install the relevant libraries and headers:
+  on debian-likes: apt-get install libmysqlclient16 libmysqlclient-dev
+  on fedora-likes: yum install mysql mysql-libs mysql-devel
+- pass DB_MYSQL=1 to make, cmake will build support if libraries are installed
+
+To compile PostgreSQL support:
+- install the relevant libraries and headers:
+  on debian-likes: apt-get install libpq5 libpq-dev
+  on fedora-likes: yum install postgresql postgresql-libs postgresql-devel
+- pass DB_PGSQL=1 to make, cmake will build support if libraries are installed
+
+-------------------------------------------------------------------------------
+Installation
+-------------------------------------------------------------------------------
+
+Cmake will build all supported database versions of the shared libraries. Only
+dynamic versions are built. You will need to rename or create a link from the
+built .so file to nwnx_db.so. For example to use the MySQL library, copy the
+nwnx_db_mysql.so file to nwnx_db.so in your NWN home directory.
+
+-------------------------------------------------------------------------------
+Configuration
+-------------------------------------------------------------------------------
+
+Copy the example nwnx2.ini section from the example nwnx2_db.ini file and
+un-comment and adjust the settings for your database.
+
+-------------------------------------------------------------------------------
+Know Bugs/Limitations
+-------------------------------------------------------------------------------
+
+- Only one NWN object is allowed in a prepared query at a time.
+- MySQL stored procedure invocation is buggy, loses connection after first call.
+- SQLite prepared query interface is not yet implemented.
+
