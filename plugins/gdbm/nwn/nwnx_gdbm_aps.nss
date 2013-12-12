@@ -64,52 +64,52 @@ void DeletePersistentVariable(object oObject, string sVarName, string sTable = "
 
 void SetPersistentString(object oObject, string sVarName, string sValue, int iExpiration=0, string sTable="pwdata")
 {
-    SetGdbmString(sTable,sVarName,sValue);
+    NWNX_GdbmStoreString(sTable,sVarName,sValue);
 }
 void SetPersistentInt(object oObject, string sVarName, int iValue, int iExpiration=0, string sTable="pwdata")
 {
-    SetGdbmInt(sTable,sVarName,iValue);
+    NWNX_GdbmStoreInt(sTable,sVarName,iValue);
 }
 void SetPersistentFloat(object oObject, string sVarName, float fValue, int iExpiration=0, string sTable="pwdata")
 {
-    SetGdbmFloat(sTable,sVarName,fValue);
+    NWNX_GdbmStoreFloat(sTable,sVarName,fValue);
 }
 void SetPersistentVector(object oObject, string sVarName, vector vVector, int iExpiration=0, string sTable="pwdata")
 {
-    SetGdbmVector(sTable,sVarName,vVector);
+    NWNX_GdbmStoreVector(sTable,sVarName,vVector);
 }
 void SetPersistentLocation(object oObject, string sVarName, location lLocation, int iExpiration=0, string sTable="pwdata")
 {
-    SetGdbmLocation(sTable,sVarName,lLocation);
+    NWNX_GdbmStoreLocation(sTable,sVarName,lLocation);
 }
 string GetPersistentString(object oObject, string sVarName, string sTable="pwdata")
 {
-    return(GetGdbmLocation(sTable,sVarName));
+    return(NWNX_GdbmFetchLocation(sTable,sVarName));
 }
 int GetPersistentInt(object oObject, string sVarName, string sTable="pwdata")
 {
-    return(GetGdbmInt(sTable,sVarName));
+    return(NWNX_GdbmFetchInt(sTable,sVarName));
 }
 float GetPersistentFloat(object oObject, string sVarName, string sTable="pwdata")
 {
-    return(GetGdbmFloat(sTable,sVarName));
+    return(NWNX_GdbmFetchFloat(sTable,sVarName));
 }
 vector GetPersistentVector(object oObject, string sVarName, string sTable="pwdata")
 {
-    return(GetGdbmVector(sTable,sVarName));
+    return(NWNX_GdbmFetchVector(sTable,sVarName));
 }
 location GetPersistentLocation(object oObject, string sVarName, string sTable="pwdata")
 {
-    return(GetGdbmLocation(sTable,sVarName));
+    return(NWNX_GdbmFetchLocation(sTable,sVarName));
 }
 
 void DeletePersistentVariable(object oObject, string sVarName, string sTable = "pwdata")
 {
     NWNX_GdbmOpen(sTable);
-    NWNX_GdbmDelete_String(sTable,sVarName);
-    NWNX_GdbmDelete_Int(sTable,sVarName);
-    NWNX_GdbmDelete_Float(sTable,sVarName);
-    NWNX_GdbmDelete_Vector(sTable,sVarName);
-    NWNX_GdbmDelete_Location(sTable,sVarName);
+    NWNX_GdbmDeleteString(sTable,sVarName);
+    NWNX_GdbmDeleteInt(sTable,sVarName);
+    NWNX_GdbmDeleteFloat(sTable,sVarName);
+    NWNX_GdbmDeleteVector(sTable,sVarName);
+    NWNX_GdbmDeleteLocation(sTable,sVarName);
 }
 

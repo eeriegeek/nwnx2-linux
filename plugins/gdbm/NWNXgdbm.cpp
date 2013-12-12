@@ -2,7 +2,7 @@
 
   NWNXgdbm.cpp - Implementation of GDBM plugin for NWNX.
 
-  Copyright 2012 eeriegeek (eeriegeek@yahoo.com)
+  Copyright 2012-2013 eeriegeek (eeriegeek@yahoo.com)
 
   This file is part of NWNX.
 
@@ -26,142 +26,156 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <stdio.h>
-#include <sys/resource.h>
 #include <libgen.h>
 
+// Access to the global gdbm plugin instance for class variables and logging.
 //
-// Tokens used to delimit request arguments, TOKEN is used to delimit string
-// argument passing. KEYSEC is used to section keys for compound keys.
+extern CNWNXgdbm gdbm;
+
+// The NWNX request mechanism requires all arguments to be passed in a single
+// string. Since the strings are probably not NULL safe, alternate separators
+// are used. One for argument lists and one for compound data keys. For this
+// module, I chose to use the ASCII record separator (RS, 0x1e) and unit
+// separator (US, 0x1f) characters. This means that these character's may not
+// be used in actual data. One safe and reasonable approach would be to filter
+// all user input fields to remove ASCII characters below 0x20 (the space)
+// with exceptions for any whitespace (tab, nl, etc.) which might be acceptable.
 //
-#define NWNX_GDBM_TOKEN  "¬"
-#define NWNX_GDBM_KEYSEC "§"
+static const char NWNX_GDBM_ARGSEP = '\x1e';
+static const char NWNX_GDBM_KEYSEP = '\x1f';
+
+static char* ConvertKeySeparatorToNull (const char* s);
+static char* ConvertNullToKeySeparator (const char* s);
+static char* split_on_char (char* tokstr, char** toklst, unsigned int toklstlen, char toksep);
 
 //
 // Base plugin (CNWNXBase) method implementation
 //
 
-CNWNXgdbm::CNWNXgdbm()
+CNWNXgdbm::CNWNXgdbm() :
+	tmp_filepath(NULL),
+	server_home(NULL),
+	cfg_filepath(NULL),
+	cfg_sync_write(true),
+	cfg_lock_file(false),
+	cfg_use_scorco(true),
+	gdbmpool(NULL)
 {
 	confKey = "GDBM";
-
-    tmp_filepath = (char*)malloc(FILENAME_MAX+1);
-
-    server_home  = NULL;
-    cfg_filepath = NULL;
-
-    cfg_sync_write = 1;
-    cfg_lock_file  = 0;
+	tmp_filepath = (char*)malloc(FILENAME_MAX+1);
 }
 
 CNWNXgdbm::~CNWNXgdbm()
 {
-	Log(4,"DB: Destructor called\n");
-    CloseAll();
-
-    free(tmp_filepath); // AdjustAlignment(oSelf,ALIGNMENT_LAWFUL,1)
+	delete gdbmpool;
+	free(cfg_filepath);
+	free(server_home);
+	free(tmp_filepath);
 }
 
 bool CNWNXgdbm::OnCreate (gline *config, const char* LogDir)
 {
-
-    //
 	// Start my log file via the base class method
 	//
-	snprintf(tmp_filepath,FILENAME_MAX,"%s/nwnx_gdbm.txt",LogDir);
-    if (!CNWNXBase::OnCreate(config,tmp_filepath)) return false;
+	snprintf(tmp_filepath, FILENAME_MAX, "%s/nwnx_gdbm.txt", LogDir);
+	if (!CNWNXBase::OnCreate(config,tmp_filepath)) return false;
 
-	Log(0,"NWNX - GDBM Plugin Version 1.0.0\n");
-	Log(0,"Copyright 2012 eeriegeek (eeriegeek@yahoo.com)\n");
+	Log(0,"NWNX - GDBM Plugin Version 2.0.0\n");
+	Log(0,"Copyright 2012-2013 eeriegeek (eeriegeek@yahoo.com)\n");
 	Log(0,"Distributed under the terms of the GNU General Public License.\n");
 	Log(0,"Visit http://www.nwnx.org for more information.\n");
 
-    //
-    // Save the server home directory
-    //
-    ssize_t len = readlink("/proc/self/exe",tmp_filepath,FILENAME_MAX);
-    if (len == -1) {
-        Log(0,"ERROR: Unable to determine server working directory. %s\n",strerror(errno));
-        return false;
-    } else {
-        tmp_filepath[len] = '\0';
-        char* dir = dirname(tmp_filepath);
-        if (dir == NULL) {
-            Log(0,"ERROR: Unable to determine server working directory. %s\n",strerror(errno));
-            return false;
-        } else {
-            server_home = strcpy((char*)malloc(strlen(dir)+1),dir);
-            Log(1,"DB: Found server home directory of [%s]\n",server_home);
-        }
-    }
-    
-    //
-	// read my configuration file section
+	// Save the server home directory
 	//
-    if(!nwnxConfig->exists(confKey)) {
+	ssize_t len = readlink("/proc/self/exe", tmp_filepath, FILENAME_MAX);
+	if (len == -1) {
+		Log(0,"ERROR: Unable to determine server working directory. %s\n", strerror(errno));
+		return false;
+	} else {
+		tmp_filepath[len] = '\0';
+		char* dir = dirname(tmp_filepath);
+		if (dir == NULL) {
+			Log(0,"ERROR: Unable to determine server working directory. %s\n", strerror(errno));
+			return false;
+		} else {
+			server_home = strcpy((char*)malloc(strlen(dir)+1), dir);
+			Log(1,"DB: Found server home directory of [%s]\n", server_home);
+		}
+	}
 
-        Log(1,"DB: GDBM configuration section [%s] not found in nwnx2.ini, using default values.\n",confKey);
-
+	// Read the [GDBM] configuration file section from nwnx2.ini
+	//
+	if(!nwnxConfig->exists(confKey)) {
+		Log(1,"WARNING: GDBM configuration section [%s] not found in nwnx2.ini, using default values.\n", confKey);
 	} else {
 
-        char* ptr =  NULL;
+		char* ptr = NULL;
 
-        // cfg_filepath
-        //
-        ptr = (char*)((*nwnxConfig)[confKey]["filepath"].c_str());
-        if ((ptr == NULL)||(strcmp(ptr,"")==0)) {
+		// cfg_filepath, default is will be database subdir of server home
+		//
+		ptr = (char*)((*nwnxConfig)[confKey]["filepath"].c_str());
+		if ((ptr == NULL)||(strcmp(ptr,"")==0)) {
+			Log(2,"INFO: No filepath found in GDBM configuration section in nwnx2.ini. Will try default location.\n");
+		} else {
+			cfg_filepath = strcpy((char*)malloc(strlen(ptr)+1),ptr);
+			Log(2,"INFO: Found filepath [%s] in GDBM configuration section in nwnx2.ini.\n", cfg_filepath);
+		}
 
-            Log(1,"DB: No filepath found in GDBM configuration section in nwnx2.ini. Will try default location.\n");
+		// cfg_sync_write, default is 1
+		//
+		ptr = (char*)((*nwnxConfig)[confKey]["no_sync"].c_str());
+		if ((ptr!=0)&&(ptr[0]=='0')&&(ptr[1]=='\x00')) cfg_sync_write = false;
 
-        } else {
+		// cfg_lock_file, default is 0
+		//
+		ptr = (char*)((*nwnxConfig)[confKey]["no_lock"].c_str());
+		if ((ptr!=0)&&(ptr[0]=='1')&&(ptr[1]=='\x00')) cfg_lock_file = true;
 
-            cfg_filepath = strcpy((char*)malloc(strlen(ptr)+1),ptr);
+		// cfg_use_scorco, default is 1
+		//
+		ptr = (char*)((*nwnxConfig)[confKey]["use_scorco"].c_str());
+		if ((ptr!=0)&&(ptr[0]=='0')&&(ptr[1]=='\x00')) cfg_use_scorco = false;
 
-            Log(1,"DB: Got filepath [%s] in GDBM configuration section in nwnx2.ini.\n",cfg_filepath);
+	}
 
-        }
+	// Set to defaults if nothing was specifed in .ini file section.
+	//
+	if (cfg_filepath == NULL) {
+		strcpy(tmp_filepath, server_home);
+		strcat(tmp_filepath, "/database");
+		cfg_filepath = strcpy((char*)malloc(strlen(tmp_filepath)+1), tmp_filepath);
+	}
 
-        // cfg_sync_write
-        //
-        ptr = (char*)((*nwnxConfig)[confKey]["no_sync"].c_str());
-        if ((ptr != NULL)&&(strcmp(ptr,"")!=0)) if (strcmp(ptr,"0")==0) cfg_sync_write = 0;
+	struct stat s;
+	if (stat(cfg_filepath,&s)==0) {
+		if (!S_ISDIR(s.st_mode)) {
+			Log(0,"ERROR: database filepath [%s] is not a directory.\n", cfg_filepath);
+			return false;
+		}
+	} else {
+		Log(0,"ERROR: Cannot stat database filepath [%s]. %s\n", cfg_filepath,strerror(errno));
+		return false;
+	}
 
-        // cfg_lock_file
-        //
-        ptr = (char*)((*nwnxConfig)[confKey]["no_lock"].c_str());
-        if ((ptr != NULL)&&(strcmp(ptr,"")!=0)) if (strcmp(ptr,"1")==0) cfg_lock_file = 1;
+	Log(0,"INFO: Directory path [%s] for physical GDBM database files.\n", cfg_filepath);
+	Log(0,"INFO: Settings: sync_write=%d, lock_file=%d, use_scorco=%d\n", cfg_sync_write, cfg_lock_file, cfg_use_scorco);
 
-    }
+	// Create the GDBM file pool object
+	//
+	gdbmpool = new GdbmPool(cfg_filepath, cfg_sync_write, cfg_lock_file);
 
-    //
-    // Set to defaults if nothing was specifed in .ini file section.
-    //
-    if (cfg_filepath == NULL) {
-        strcpy(tmp_filepath,server_home);
-        strcat(tmp_filepath,"/database");
-        cfg_filepath = strcpy((char*)malloc(strlen(tmp_filepath)+1),tmp_filepath);
-    }
-
-    struct stat s;
-    if (stat(cfg_filepath,&s)==0) {
-        if (!S_ISDIR(s.st_mode)) {
-            Log(0,"ERROR: filepath = [%s] found GDBM configuration section is not a directory.\n",cfg_filepath);
-            return false;
-        }
-    } else {
-        Log(0,"ERROR: Cannot stat filepath = [%s] found GDBM configuration section. %s\n",cfg_filepath,strerror(errno));
-        return false;
-    }
-
-    Log(0,"INFO: Using filepath [%s] for physical GDBM database files. Flags: sync_write=%d, lock_file=%d\n",cfg_filepath,cfg_sync_write,cfg_lock_file);
-
-
-    struct rlimit rlim_nofile;
-    int r = getrlimit(RLIMIT_NOFILE,&rlim_nofile);
-    if (r==-1) {
-        Log(0,"WARNING: Cannot get file limits. %s\n",strerror(errno));
-    } else {
-        Log(0,"INFO: file descriptor limits: soft=%lld, hard=%lld\n", (long long) rlim_nofile.rlim_cur, (long long) rlim_nofile.rlim_max);
-    }
+	// This plugin depends on the SCO/RCO services registerd by the ODMBC
+	// driver. Because of this dependency, this event callback is used
+	// to ensure that our (the GDBM) callbacks are only registerd after
+	// the ODMBC service is available.
+	//
+	if ( cfg_use_scorco ) {
+		HANDLE handlePluginsLoaded = HookEvent("NWNX/Core/PluginsLoaded", PluginsLoaded_EventHandler);
+		if ( ! handlePluginsLoaded ) {
+			Log(0,"ERROR: Unable to register NWNX/Core/PluginsLoaded Handler.\n");
+			cfg_use_scorco = false;
+		}
+	}
 
 	return true;
 }
@@ -174,22 +188,25 @@ char* CNWNXgdbm::OnRequest (char* gameObject, char* Request, char* Parameters)
 	Log(3,"OnRequest: GOT-REQ [%s]\n",Request);
 	Log(3,"OnRequest: GOT-PAR [%s]\n",Parameters);
 
-    // TODO: use the perfect hash generator? This should be pretty fast anyway.
-    // Only 4 of the keys get beyond the first char and 1 beyond 2 in strcmp.
+	// FUTURE: use the perfect hash generator? This should be pretty fast anyway.
+	// Only 4 of the keys get beyond the first char and 1 beyond 2 in strcmp.
 
-	     if (strcmp(Request,"FETCH"     )==0) pResult = Fetch(gameObject,Parameters);
-	else if (strcmp(Request,"STORE"     )==0) pResult = Store(gameObject,Parameters);
-	else if (strcmp(Request,"EXISTS"    )==0) pResult = Exists(gameObject,Parameters);
-	else if (strcmp(Request,"DELETE"    )==0) pResult = Delete(gameObject,Parameters);
-	else if (strcmp(Request,"FIRSTKEY"  )==0) pResult = FirstKey(gameObject,Parameters);
-	else if (strcmp(Request,"NEXTKEY"   )==0) pResult = NextKey(gameObject,Parameters);
-	else if (strcmp(Request,"OPEN"      )==0) pResult = Open(gameObject,Parameters);
-	else if (strcmp(Request,"SYNC"      )==0) pResult = Sync(gameObject,Parameters);
-	else if (strcmp(Request,"CLOSE"     )==0) pResult = Close(gameObject,Parameters);
+		 if (strcmp(Request,"FETCH"	    )==0) pResult = Fetch(gameObject,Parameters);
+	else if (strcmp(Request,"STORE"	    )==0) pResult = Store(gameObject,Parameters);
+	else if (strcmp(Request,"EXISTS"	)==0) pResult = Exists(gameObject,Parameters);
+	else if (strcmp(Request,"DELETE"	)==0) pResult = Delete(gameObject,Parameters);
+	else if (strcmp(Request,"SETOBJARG" )==0) pResult = SetObjectArguments(gameObject,Parameters);
+	else if (strcmp(Request,"OPEN"	    )==0) pResult = Open(gameObject,Parameters);
+	else if (strcmp(Request,"SYNC"	    )==0) pResult = Sync(gameObject,Parameters);
+	else if (strcmp(Request,"CLOSE"	    )==0) pResult = Close(gameObject,Parameters);
 	else if (strcmp(Request,"CLOSEALL"  )==0) pResult = CloseAll(gameObject,Parameters);
-	else if (strcmp(Request,"CREATE"    )==0) pResult = Create(gameObject,Parameters);
-    else if (strcmp(Request,"REORGANIZE")==0) pResult = Reorganize(gameObject,Parameters);
+	else if (strcmp(Request,"CREATE"	)==0) pResult = Create(gameObject,Parameters);
+	else if (strcmp(Request,"REORGANIZE")==0) pResult = Reorganize(gameObject,Parameters);
 	else if (strcmp(Request,"DESTROY"   )==0) pResult = Destroy(gameObject,Parameters);
+	else { 
+		Log(0,"ERROR: unrecognized GDBM operation [%s] requested\n",Request);
+		return pResult;
+	}
 
 	Log(3,"OnRequest: RET-PAR [%s]\n",Parameters);
 	Log(3,"OnRequest: RET-RES [%s]\n",pResult);
@@ -207,8 +224,8 @@ char* CNWNXgdbm::OnRequest (char* gameObject, char* Request, char* Parameters)
 
 bool CNWNXgdbm::OnRelease()
 {
-    // Does this ever happen?
-	Log(4,"INFO: OnRelease called\n");
+	// Does this ever happen?
+	Log(2,"INFO: OnRelease: Called\n");
 	return CNWNXBase::OnRelease();
 }
 
@@ -220,172 +237,79 @@ bool CNWNXgdbm::OnRelease()
 // Database Lifecycle Methods
 //
 
-// Arg 1 -> the name of the database
-// Arg 2 -> truncate flag (default = 0 (off))
-// Ret   -> if successful 1, otherwise 0
+// Arg0 -> the name of the database
+// Arg1 -> truncate flag (default = 0 (off))
+//
+// Ret  -> if successful 1, otherwise 0
 //
 char* CNWNXgdbm::Create(char* gameObject, char* Parameters) 
 {
-    char* arg = strcpy((char*)malloc(strlen(Parameters)+1),Parameters);
-
-    char* name     = strtok(arg,NWNX_GDBM_TOKEN);
-    char* truncate = strtok(NULL,NWNX_GDBM_TOKEN);
-
-	if ( (name==NULL)||(*name=='\0') || (truncate==NULL)||(*truncate=='\0') ) {
-
-		Log(0,"ERROR: Missing argument to CREATE method, was passed [%s]\n",Parameters);
-
-        strcpy(Parameters,"0");
-
-    } else {
-
-		Log(4,"NAM [%s]\n",name);
-		Log(4,"TRC [%s]\n",truncate);
-
-        strcpy(Parameters,"0");
-
-        gdbm_file_pool_t::iterator node_itr = gdbm_file_pool.find(name);
-        if (node_itr != gdbm_file_pool.end()) {
-    	    Log(0,"WARNING: Create called on open GDBM database name [%s], will close and proceed.\n",name);
-
-    	    gdbm_close(node_itr->second.dbf);
-    
-            gdbm_file_pool.erase(node_itr);
-            
-        } else {
-    	    Log(2,"No open dbf name [%s] found while creating, good.\n",name);
-        }
-
-        snprintf(tmp_filepath,FILENAME_MAX,"%s/%s.gdbm",cfg_filepath,name);
-     	Log(2,"Creating/Reopening GDBM database file [%s]\n",tmp_filepath);
-    
-        gdbm_file_node_t node;
-    
-        if (strcmp(truncate,"1")==0) {
-    	    Log(0,"INFO: Creating GDBM database file [%s], with truncation.\n",tmp_filepath);
-            node.dbf = gdbm_open(tmp_filepath,0,GDBM_WRCREAT|GDBM_NEWDB|GDBM_NOLOCK|GDBM_SYNC,0600,0);
-        } else {
-    	    Log(0,"INFO: Creating GDBM database file [%s]\n",tmp_filepath);
-            node.dbf = gdbm_open(tmp_filepath,0,GDBM_WRCREAT|GDBM_NOLOCK|GDBM_SYNC,0600,0);
-        }
-  
-        if (node.dbf == NULL) {
-
-            Log(0,"ERROR: Call to gdbm_open failed for database filename [%s], %s\n",tmp_filepath,gdbm_strerror(gdbm_errno));
-    
-        } else {
-    
-           	Log(0,"INFO: Creation of GDBM database [%s] successful.\n",tmp_filepath);
-    
-            node.act = time(NULL);
-    
-            // FUTURE: if limiting pooling, check if pool full here, and reallocate
-                
-            gdbm_file_pool[name] = node;
-
-            strcpy(Parameters,"1");
-    
-        }
-
-    }
-
-    free(arg);
-
+	if ((Parameters==NULL)||(*Parameters=='\0')) {
+		Log(0,"ERROR: Missing ALL arguments to CREATE method\n");
+		return NULL;
+	}
+	char* arg = strdup(Parameters);
+	strcpy(Parameters,"0");
+	char* arglst[2];
+	split_on_char(arg,arglst,2,NWNX_GDBM_ARGSEP);
+	char* db_name = arglst[0];
+	if ((db_name==NULL)||(*db_name=='\0')) { Log(0,"ERROR: Missing argument db_name to CREATE in [%s]\n",Parameters); free(arg); return NULL; }
+	char* db_truncate = arglst[1];
+	if ((db_truncate==NULL)||(*db_truncate=='\0')) { Log(0,"ERROR: Missing argument db_truncate to CREATE in [%s]\n",Parameters); free(arg); return NULL; }
+	Log(2,"INFO: CREATE: db_name [%s], db_truncate [%s]\n", db_name, db_truncate);
+	if ( gdbmpool->create(db_name,(db_truncate[0]=='1')) ) {
+		Log(2,"INFO: CREATE: db_name [%s], db_truncate [%s], Create OK\n", db_name, db_truncate);
+		strcpy(Parameters,"1");
+	} else {
+		Log(0,"ERROR: CREATE: db_name [%s], db_truncate [%s], FAILED\n", db_name, db_truncate);
+	}
+	free(arg);
 	return NULL;
-
 }
 
-// Arg 1 - the name of the database
-// Ret   - nothing
+// Arg0 - the name of the database
+//
+// Ret  - nothing
 //
 char* CNWNXgdbm::Reorganize(char* gameObject, char* Parameters)
 {
-    char* name = Parameters;
-
-	if ( (name==NULL)||(*name=='\0') ) {
-
-		Log(0,"ERROR: Missing argument to REORGANIZE method, was passed [%s]\n",Parameters);
-
-    } else {
-
-        gdbm_file_pool_t::iterator node_itr = gdbm_file_pool.find(name);
-
-        if (node_itr != gdbm_file_pool.end()) {
-	
-        	Log(0,"INFO: Reorganizing GDBM database name [%s]\n",name);
-
-	        int ret = gdbm_reorganize(node_itr->second.dbf);
-	        if (ret == -1) {
-		        Log(0,"ERROR: Call to gdbm_reorganize failed for database name [%s], %s\n",name,gdbm_strerror(gdbm_errno));
-        	}
-
-            node_itr->second.act = time(NULL);
- 
-        } else {
- 
-        	Log(0,"ERROR: REORGANIZE Could not find open GDBM database name [%s]\n",Parameters);
-
-        }
-    }
-
+	if ((Parameters==NULL)||(*Parameters=='\0')) {
+		Log(0,"ERROR: Missing ALL arguments to REORGANIZE method\n");
+		return NULL;
+	}
+	char* db_name = Parameters;
+	Log(2,"INFO: REORGANIZE: db_name [%s]\n", db_name);
+	gdbmpool->reorganize(db_name);
 	return NULL;
 }
 
-// Arg 1 - the name of the database
-// Ret   - 1 if unlink succeeds, 0 if anything goes wrong
+// Arg0 - the name of the database
+//
+// Ret  - 1 if unlink succeeds, 0 if anything goes wrong
 //
 char* CNWNXgdbm::Destroy(char* gameObject, char* Parameters)
 {
-    char* name = Parameters;
-
-	if ( (name==NULL)||(*name=='\0') ) {
-
-		Log(0,"ERROR: Missing argument to DESTROY method, was passed [%s]\n",Parameters);
-        strcpy(Parameters,"0");
-
-    } else {
-
-        gdbm_file_pool_t::iterator node_itr = gdbm_file_pool.find(name);
-
-        if (node_itr != gdbm_file_pool.end()) {
-
-    	    Log(0,"WARNING: Destroy called on open GDBM database name [%s], will close and proceed.\n",name);
-
-    	    gdbm_close(node_itr->second.dbf);
-    
-            gdbm_file_pool.erase(node_itr);
-
-        } else {
-
-    	    Log(2,"No open dbf name [%s] found while destroying, good.\n",name);
-
-        }
-
-        snprintf(tmp_filepath,FILENAME_MAX,"%s/%s.gdbm",cfg_filepath,Parameters);
-
-        Log(0,"INFO: Deleting GDBM database file [%s]\n",tmp_filepath);
-
-    	int ret = unlink(tmp_filepath);
-    	if (ret == -1) {
-
-    		Log(0,"ERROR: Call to unlink failed for database filename [%s], %s\n",tmp_filepath,gdbm_strerror(gdbm_errno));
-            strcpy(Parameters,"0");
-
-    	} else {
-
-            strcpy(Parameters,"1");
-
-        }
-
-    }
-
+	if ((Parameters==NULL)||(*Parameters=='\0')) {
+		Log(0,"ERROR: Missing ALL arguments to DESTROY method\n");
+		return NULL;
+	}
+	char* db_name = Parameters;
+	Log(2,"INFO: DESTROY: db_name [%s]\n", db_name);
+	if ( gdbmpool->destroy(db_name) ) {
+		Log(2,"INFO: DESTROY: db_name [%s], Create OK\n", db_name);
+		strcpy(Parameters,"1");
+	} else {
+		Log(0,"ERROR: DESTROY: db_name [%s], FAILED\n", db_name);
+		strcpy(Parameters,"0");
+	}
 	return NULL;
 }
 
-// Arg 1 - the name of the database
-// Arg 2 - create flag (default = 1 (on))
-// Arg 3 - read-only flag (default = 0 (off))
-// Ret   - boolean -> 1 if successful open (or was already open), 0 if failed
+// Arg0 - the name of the database
+// Arg1 - create flag (default = 1 (on))
+// Arg2 - read-only flag (default = 0 (off))
+//
+// Ret  - boolean -> 1 if successful open (or was already open), 0 if failed
 //
 // Added GDBM_SYNC option to config file, But after a quick test, I couldn't
 // see a difference in speed over 10000 inserts with GDBM_SYNC on, so I'll
@@ -394,469 +318,435 @@ char* CNWNXgdbm::Destroy(char* gameObject, char* Parameters)
 //
 char* CNWNXgdbm::Open(char* gameObject, char* Parameters) 
 {
-    char* arg = strcpy((char*)malloc(strlen(Parameters)+1),Parameters);
-
-    char* name      = strtok(arg,NWNX_GDBM_TOKEN);
-    char* create    = strtok(NULL,NWNX_GDBM_TOKEN);
-    char* read_only = strtok(NULL,NWNX_GDBM_TOKEN);
-
-	if ( (name==NULL)||(*name=='\0') || (read_only==NULL)||(*read_only=='\0') || (create==NULL)||(*create=='\0') ) {
-
-		Log(0,"ERROR: Missing argument to OPEN method, was passed [%s]\n",Parameters);
-        strcpy(Parameters,"0");
-
-    } else {
-
-		Log(4,"NAM [%s]\n",name);
-		Log(4,"CRT [%s]\n",create);
-		Log(4,"RDO [%s]\n",read_only);
-
-        strcpy(Parameters,"0");
-
-        gdbm_file_pool_t::iterator node_itr = gdbm_file_pool.find(name);
-    
-        if (node_itr != gdbm_file_pool.end()) {
-
-            // In a number of use cases, it is much simpler to simply open the
-            // database file before access, rather than verify the state, so
-            // redundant open here must just return a success message.
-    
-    	    Log(2,"Found open dbf name [%s], nothing to do.\n",name);
-
-            node_itr->second.act = time(NULL);
-
-            strcpy(Parameters,"1");
-    
-        } else {
-    
-    	    Log(2,"No open dbf name [%s] found, opening.\n",name);
-    
-            snprintf(tmp_filepath,FILENAME_MAX,"%s/%s.gdbm",cfg_filepath,name);
-        	Log(2,"Opening/creating GDBM database file [%s]\n",tmp_filepath);
-
-            int mode = 0;
-
-            if (strcmp(read_only,"1")==0) mode|=GDBM_READER; else if (strcmp(create,"1")==0) mode|=GDBM_WRCREAT; else mode|=GDBM_WRITER;
-            if (cfg_sync_write) mode |= GDBM_SYNC;
-            if (!cfg_lock_file) mode |= GDBM_NOLOCK;
-
-        	Log(2,"Opening/creating GDBM database file with mode [%08X]\n",mode);
-
-            gdbm_file_node_t node;
-    
-        	node.dbf = gdbm_open(tmp_filepath,0,GDBM_WRCREAT|GDBM_NOLOCK|GDBM_SYNC,0600,0);
-    
-        	if (node.dbf == NULL) {
-
-    			Log(0,"ERROR: Call to gdbm_open failed for database filename [%s], %s\n",tmp_filepath,gdbm_strerror(gdbm_errno));
-
-        	} else {
-    
-            	Log(0,"Opened GDBM database [%s]\n",tmp_filepath);
-    
-                node.act = time(NULL);
-    
-                // FUTURE: check if pool full here
-                
-                gdbm_file_pool[name] = node;
-
-                strcpy(Parameters,"1");
-    
-            }
-
-        }
-
-    }
-
-    free(arg);
-
+	if ((Parameters==NULL)||(*Parameters=='\0')) {
+		Log(0,"ERROR: Missing ALL arguments to OPEN method\n");
+		return NULL;
+	}
+	char* arg = strdup(Parameters);
+	strcpy(Parameters,"0");
+	char* arglst[3];
+	split_on_char(arg,arglst,3,NWNX_GDBM_ARGSEP);
+	char* db_name = arglst[0];
+	if ((db_name==NULL)||(*db_name=='\0')) { Log(0,"ERROR: Missing argument db_name to OPEN in [%s]\n",Parameters); free(arg); return NULL; }
+	char* db_create = arglst[1];
+	if ((db_create==NULL)||(*db_create=='\0')) { Log(0,"ERROR: Missing argument db_create to OPEN in [%s]\n",Parameters); free(arg); return NULL; }
+	char* db_readonly = arglst[2];
+	if ((db_readonly==NULL)||(*db_readonly=='\0')) { Log(0,"ERROR: Missing argument db_readonly to OPEN in [%s]\n",Parameters); free(arg); return NULL; }
+	Log(2,"INFO: OPEN: db_name [%s], db_create [%s], db_readonly [%s]\n", db_name, db_create, db_readonly);
+	if ( gdbmpool->open(db_name,(db_create[0]=='1'),(db_readonly[0]=='1')) ) {
+		Log(2,"INFO: OPEN: db_name [%s], OK\n", db_name);
+		strcpy(Parameters,"1");
+	} else {
+		Log(0,"ERROR: Could not open db_name [%s] in OPEN method\n", db_name);
+	}
+	free(arg);
 	return NULL;
 }
 
-// Arg 1 - the name of the database
+// Arg0 - the name of the database
+//
 // Ret   - nothing
 //
 char* CNWNXgdbm::Sync(char* gameObject, char* Parameters) 
 {
-
-	if ( (Parameters==NULL)||(*Parameters=='\0') ) {
-
-		Log(0,"ERROR: Missing argument to SYNC method, was passed [%s]\n",Parameters);
-
-    } else {
-
-        gdbm_file_pool_t::iterator node_itr = gdbm_file_pool.find(Parameters);
-
-        if (node_itr != gdbm_file_pool.end()) {
-	
-        	Log(0,"Syncing GDBM database name [%s]\n",Parameters);
-
-        	gdbm_sync(node_itr->second.dbf);
-            // returns void, nothing to check
-
-           	Log(0,"Test time 1 [%d]\n",node_itr->second.act);
-            node_itr->second.act = time(NULL);
-        	Log(0,"Test time 2 [%d]\n",node_itr->second.act);
- 
-        } else {
- 
-        	Log(0,"ERROR: SYNC Could not find open GDBM database name [%s]\n",Parameters);
-
-        }
-    }
-
+	if ((Parameters==NULL)||(*Parameters=='\0')) {
+		Log(0,"ERROR: Missing ALL arguments to SYNC method\n");
+		return NULL;
+	}
+	char* db_name = Parameters;
+	Log(2,"INFO: SYNC: db_name [%s]\n", db_name);
+	gdbmpool->sync(db_name);
 	return NULL;
 }
 
-
-// Arg 1 - the name of the database
-// Ret   - nothing
+// Arg0 - the name of the database
+//
+// Ret  - nothing
 //
 char* CNWNXgdbm::Close(char* gameObject, char* Parameters) 
 {
-
-	if ( (Parameters==NULL)||(*Parameters=='\0') ) {
-
-		Log(0,"ERROR: Missing argument to CLOSE method, was passed [%s]\n",Parameters);
-
-    } else {
-
-        gdbm_file_pool_t::iterator node_itr = gdbm_file_pool.find(Parameters);
-    
-        if (node_itr != gdbm_file_pool.end()) {
-    	
-    	    Log(0,"INFO: Closing GDBM database name [%s]\n",Parameters);
-    
-    	    gdbm_close(node_itr->second.dbf);
-            // returns void, nothing to check
-    
-            gdbm_file_pool.erase(node_itr);
-    
-        } else {
-    
-        	Log(0,"WARNING: CLOSE Could not find open GDBM database name [%s]\n",Parameters);
-    
-        }
-    }
-
+	if ((Parameters==NULL)||(*Parameters=='\0')) {
+		Log(0,"ERROR: Missing ALL arguments to CLOSE method\n");
+		return NULL;
+	}
+	char* db_name = Parameters;
+	Log(2,"INFO: CLOSE: db_name [%s]\n", db_name);
+	gdbmpool->close(db_name);
 	return NULL;
 }
 
+// Args - nothing
+//
+// Ret  - nothing
+//
 char* CNWNXgdbm::CloseAll(char* gameObject, char* Parameters)
 {
-    CloseAll();
-    return NULL;
-}
-
-void CNWNXgdbm::CloseAll()
-{
-    gdbm_file_pool_t::iterator node_itr = gdbm_file_pool.begin();
-
-    while( node_itr != gdbm_file_pool.end() ) {
-
-        Log(0,"INFO: Closing GDBM database name [%s]\n",node_itr->first.c_str());
-        gdbm_close(node_itr->second.dbf);
-        gdbm_file_pool.erase(node_itr);
-        node_itr++;
-
-    }
-
+	Log(2,"INFO: CLOSEALL\n");
+	gdbmpool->close_all();
+	return NULL;
 }
 
 //
 // Data Manipulation Methods
 //
 
-// Arg 1 - the name of the database
-// Arg 2 - replace flag (default = 1 (TRUE))
-// Arg 3 - the key
-// Arg 4 - the value
+// Arg0 - the name of the database
+// Arg1 - replace flag (default = 1 (TRUE))
+// Arg2 - open flag (default = 1 (TRUE))
+// Arg3 - the key
+// Arg4 - the value
 //
 // IMPORTANT, the key may contain a seperator so it must be diff from the arg
-//            separator or things get confused here.
+//			separator or things get confused here.
 //
 // Ret   - TRUE on successful insert, if replace flag = 0 (FALSE), FALSE is
-//         returned for collision and the value is not replaced.
+//		 returned for collision and the value is not replaced.
 //
-
 char* CNWNXgdbm::Store(char* gameObject, char* Parameters)
 {
-    char* arg = strcpy((char*)malloc(strlen(Parameters)+1),Parameters);
-    char** args = UnBundleArguments(arg);
-
-    datum key, val;
-	char* name = args[0];
-    if ((name==NULL)||(*name=='\0')) { Log(0,"ERROR: Missing arg1 to STORE in [%s]\n",Parameters); strcpy(Parameters,"0"); return NULL; }
-	char* repl = args[1];
-    if ((repl==NULL)||(*repl=='\0')) { Log(0,"ERROR: Missing arg2 to STORE in [%s]\n",Parameters); strcpy(Parameters,"0"); return NULL; }
-	key.dptr = args[2];
-    if ((key.dptr==NULL)||(*key.dptr=='\0')) { Log(0,"ERROR: Missing arg3 to STORE in [%s]\n",Parameters); strcpy(Parameters,"0"); return NULL; }
-	val.dptr = args[3];
-    if ((val.dptr==NULL)||(*val.dptr=='\0')) { Log(0,"ERROR: Missing arg4 to STORE in [%s]\n",Parameters); strcpy(Parameters,"0"); return NULL; }
-
-/*
-    datum key, val;
-	char* name = strtok(arg,NWNX_GDBM_TOKEN);
-	char* repl = strtok(NULL,NWNX_GDBM_TOKEN);
-	key.dptr   = strtok(NULL,NWNX_GDBM_TOKEN);
-	val.dptr   = strtok(NULL,NWNX_GDBM_TOKEN); // hmmm, will truncate if val contains TOKEN
-*/
-
-	if ( (name==NULL)||(*name=='\0') || (key.dptr==NULL)||(*key.dptr=='\0') || (val.dptr == NULL)||(*val.dptr=='\0') || (repl==NULL)||(*repl=='\0') ) {
-
-		Log(0,"ERROR: Missing argument to STORE method, was passed [%s]\n",Parameters);
-
-        strcpy(Parameters,"0");
-
-    } else {
-	
-	    key.dsize = strlen(key.dptr)+1;
-	    val.dsize = strlen(val.dptr)+1;
-
-		Log(4,"NAM [%s]\n",name);
-		Log(4,"KEY [%s]\n",key.dptr);
-		Log(4,"RPL [%s]\n",repl);
-		Log(4,"VAL [%s]\n",val.dptr);
-
-        strcpy(Parameters,"0");
-
-        gdbm_file_pool_t::iterator node_itr = gdbm_file_pool.find(name);
-
-        if (node_itr != gdbm_file_pool.end()) {
-
-            int flag = ((strcmp(repl,"1")==0)?GDBM_REPLACE:GDBM_INSERT);
-
-       		int ret = gdbm_store(node_itr->second.dbf,key,val,flag);
-
-    		if (ret <= -1) {
-    			Log(0,"ERROR: Call to gdbm_store failed for database name [%s] %s\n",name,gdbm_strerror(gdbm_errno));
-    		} else if (ret == 0) {
-                // ret = 0 indicates success, ret = 1 when GDBM_INSERT indicates key collision -> drop through return "0"
-                strcpy(Parameters,"1");
-            }
-
-            node_itr->second.act = time(NULL);
-
-        } else {
-	        Log(0,"WARNING: STORE: Could not find open GDBM database name [%s]\n",name);
-        }
-
+	if ((Parameters==NULL)||(*Parameters=='\0')) {
+		Log(0,"ERROR: Missing ALL arguments to STORE method\n");
+		return NULL;
 	}
-
-    free(arg);
-
+	char* arg = strdup(Parameters);
+	strcpy(Parameters,"0");
+	char* arglst[5];
+	split_on_char(arg,arglst,5,NWNX_GDBM_ARGSEP);
+	char* db_name = arglst[0];
+	if ((db_name==NULL)||(*db_name=='\0')) { Log(0,"ERROR: Missing argument db_name to STORE in [%s]\n",Parameters); free(arg); return NULL; }
+	char* db_replace = arglst[1];
+	if ((db_replace==NULL)||(*db_replace=='\0')) { Log(0,"ERROR: Missing argument db_replace to STORE in [%s]\n",Parameters); free(arg); return NULL; }
+	char* db_open = arglst[2];
+	if ((db_open==NULL)||(*db_open=='\0')) { Log(0,"ERROR: Missing argument db_open to STORE in [%s]\n",Parameters); free(arg); return NULL; }
+	char* db_key = arglst[3];
+	if ((db_key==NULL)||(*db_key=='\0')) { Log(0,"ERROR: Missing argument db_key to STORE in [%s]\n",Parameters); free(arg); return NULL; }
+	char* db_value = arglst[4];
+	if ((db_value==NULL)||(*db_value=='\0')) { Log(0,"ERROR: Missing argument db_value to STORE in [%s]\n",Parameters); free(arg); return NULL; }
+	Log(3,"DB: STORE: db_name [%s], db_replace [%s], db_open [%s]\n", db_name, db_replace, db_open);
+	Log(3,"DB: STORE: db_key [%s], db_value [%s]\n", db_key, db_value);
+    if ( gdbmpool->store(db_name, db_key, db_value, strlen(db_value), (db_replace[0]=='1'), (db_open[0]=='1')) ) {
+		Log(3,"DB: STORE: db_name [%s], db_key [%s], Key inserted/updated\n", db_name, db_key);
+		strcpy(Parameters,"1");
+	} else {
+		Log(3,"DB: STORE: db_name [%s], db_key [%s], Collision, Key NOT inserted/updated\n", db_name, db_key);
+	}
+	free(arg);
 	return NULL;
 }
 
-// Arg 1 - the name of the database
-// Arg 2 - the key
-// Ret   - 1 if key exists
+// Arg0 - the name of the database
+// Arg1 - open flag
+// Arg2 - the key
+//
+// Ret  - 1 if key exists
 //
 char* CNWNXgdbm::Exists(char* gameObject, char* Parameters)
 {
-    char* arg = strcpy((char*)malloc(strlen(Parameters)+1),Parameters);
-
-    datum key, val;
-	char* name = strtok(arg,NWNX_GDBM_TOKEN);
-	key.dptr   = strtok(NULL,NWNX_GDBM_TOKEN);
-
-	if ( (name==NULL)||(*name=='\0') || (key.dptr==NULL)||(*key.dptr=='\0') ) {
-
-		Log(0,"ERROR: Missing argument to EXISTS method, was passed [%s]\n",Parameters);
-
-        strcpy(Parameters,"0");
-
-    } else {
-	
-        key.dsize = strlen(key.dptr)+1;
-
-		Log(4,"NAM [%s]\n",name);
-		Log(4,"KEY [%s]\n",key.dptr);
-
-        strcpy(Parameters,"0");
-
-        gdbm_file_pool_t::iterator node_itr = gdbm_file_pool.find(name);
-
-        if (node_itr != gdbm_file_pool.end()) {
-
-    		int ret = gdbm_exists(node_itr->second.dbf,key);
-
-    		if (ret <= -1) {
-    			Log(0,"ERROR: Call to gdbm_exists failed for database name [%s], %s\n",name,gdbm_strerror(gdbm_errno));
-    		} else if (ret == 1) {
-                strcpy(Parameters,"1");
-            }
-
-            node_itr->second.act = time(NULL);
-
-        } else {
-	        Log(0,"WARNING: EXISTS: Could not find open GDBM database name [%s]\n",name);
-        }
-
+	if ((Parameters==NULL)||(*Parameters=='\0')) {
+		Log(0,"ERROR: Missing ALL arguments to EXISTS method\n");
+		return NULL;
 	}
-
-    free(arg);
-
+	char* arg = strdup(Parameters);
+	strcpy(Parameters,"0");
+	char* arglst[3];
+	split_on_char(arg,arglst,3,NWNX_GDBM_ARGSEP);
+	char* db_name = arglst[0];
+	if ((db_name==NULL)||(*db_name=='\0')) { Log(0,"ERROR: Missing argument db_name to EXISTS in [%s]\n",Parameters); free(arg); return NULL; }
+	char* db_open = arglst[1];
+	if ((db_open==NULL)||(*db_open=='\0')) { Log(0,"ERROR: Missing argument db_open to EXISTS in [%s]\n",Parameters); free(arg); return NULL; }
+	char* db_key = arglst[2];
+	if ((db_key==NULL)||(*db_key=='\0')) { Log(0,"ERROR: Missing argument db_key to EXISTS in [%s]\n",Parameters); free(arg); return NULL; }
+	Log(3,"DB: EXISTS: db_name [%s], db_open [%s], db_key [%s]\n", db_name, db_open, db_key);
+    if ( gdbmpool->exists(db_name, db_key) ) {
+		Log(3,"DB: EXISTS: db_name [%s], db_key [%s], Key inserted/updated\n", db_name, db_key);
+		strcpy(Parameters,"1");
+	} else {
+		Log(3,"DB: EXISTS: db_name [%s], db_key [%s], Collision, Key NOT inserted/updated\n", db_name, db_key);
+	}
+	free(arg);
 	return NULL;
 }
 
-// Arg 1 - the name of the database
-// Arg 2 - the key
-// Ret   - the value
+// Arg0 - name of the database
+// Arg1 - open flag
+// Arg2 - the key
+//
+// Ret  - the value
 //
 char* CNWNXgdbm::Fetch(char* gameObject, char* Parameters)
 {
-    char* arg = strcpy((char*)malloc(strlen(Parameters)+1),Parameters);
-
-    datum key, val;
-	char* name = strtok(arg,NWNX_GDBM_TOKEN);
-	key.dptr   = strtok(NULL,NWNX_GDBM_TOKEN);
-	val.dptr = NULL;
-
-	if ( (name==NULL)||(*name=='\0') || (key.dptr==NULL)||(*key.dptr=='\0') ) {
-
-		Log(0,"ERROR: Missing argument to FETCH method, was passed [%s]\n",Parameters);
-
-        strcpy(Parameters,"");
-
-    } else {
-	
-		key.dsize = strlen(key.dptr)+1;
-
-		Log(4,"NAM [%s]\n",name);
-		Log(4,"KEY [%s]\n",key.dptr);
-
-        gdbm_file_pool_t::iterator node_itr = gdbm_file_pool.find(name);
-
-        if (node_itr != gdbm_file_pool.end()) {
-
-		    val = gdbm_fetch(node_itr->second.dbf,key);
-
-		    if (val.dptr==NULL) strcpy(Parameters,"");
-
-            node_itr->second.act = time(NULL);
-
-        } else {
-	        Log(0,"WARNING: FETCH: Could not find open GDBM database name [%s]\n",name);
-            strcpy(Parameters,"");
-        }
-
+	if ((Parameters==NULL)||(*Parameters=='\0')) {
+		Log(0,"ERROR: Missing ALL arguments to FETCH method\n");
+		return NULL;
 	}
-
-    free(arg);
-
-	// gdbm allocates this with malloc so NWNX lib is ok to free after use.
-	return val.dptr;
-
+	char* arg = strdup(Parameters);
+	char* arglst[3];
+	split_on_char(arg,arglst,3,NWNX_GDBM_ARGSEP);
+	char* db_name = arglst[0];
+	if ((db_name==NULL)||(*db_name=='\0')) { Log(0,"ERROR: Missing argument db_name to FETCH in [%s]\n",Parameters); free(arg); return NULL; }
+	char* db_open = arglst[1];
+	if ((db_open==NULL)||(*db_open=='\0')) { Log(0,"ERROR: Missing argument db_open to FETCH in [%s]\n",Parameters); free(arg); return NULL; }
+	char* db_key = arglst[2];
+	if ((db_key==NULL)||(*db_key=='\0')) { Log(0,"ERROR: Missing argument db_key to FETCH in [%s]\n",Parameters); free(arg); return NULL; }
+	Log(3,"DB: FETCH: db_name [%s], db_open [%s], db_key [%s]\n", db_name, db_open, db_key);
+	char* db_value = NULL;
+	size_t db_value_size = 0;
+    if ( gdbmpool->fetch(db_name, db_key, &db_value, &db_value_size, (db_open[0]=='1')) ) {
+		Log(3,"DB: FETCH: db_name [%s], db_key [%s], Found\n", db_name, db_key);
+	} else {
+		Log(3,"DB: FETCH: db_name [%s], db_key [%s], NOT Found\n", db_name, db_key);
+	}
+	free(arg);
+	return db_value;
 }
 
-// Arg 1 - the name of the database
-// Arg 2 - the key
-// Ret   - 1 if the key was found, 0 if dne (via Parameters)
+// Arg0 - name of the database
+// Arg1 - open flag
+// Arg2 - the key
+//
+// Ret  - 1 if the key was found, 0 if dne (via Parameters)
 //
 char* CNWNXgdbm::Delete(char* gameObject, char* Parameters)
 {
-    char* arg = strcpy((char*)malloc(strlen(Parameters)+1),Parameters);
-
-    datum key;
-	char* name = strtok(arg,NWNX_GDBM_TOKEN);
-	key.dptr   = strtok(NULL,NWNX_GDBM_TOKEN);
-
-	if ( (name==NULL)||(*name=='\0') || (key.dptr==NULL)||(*key.dptr=='\0') ) {
-
-		Log(0,"ERROR: Missing argument to DELETE method, was passed [%s]\n",Parameters);
-
-        strcpy(Parameters,"0");
-
-    } else {
-	
-		key.dsize = strlen(key.dptr)+1;
-
-		Log(4,"NAM [%s]\n",name);
-		Log(4,"KEY [%s]\n",key.dptr);
-
-        strcpy(Parameters,"0");
-
-        gdbm_file_pool_t::iterator node_itr = gdbm_file_pool.find(name);
-
-        if (node_itr != gdbm_file_pool.end()) {
-
-		    int ret = gdbm_delete(node_itr->second.dbf,key);
-
-    		if ((ret <= -1)&&(gdbm_errno!=GDBM_ITEM_NOT_FOUND)) {
-    			Log(0,"ERROR: Call to gdbm_delete failed for database name [%s], %s\n",name,gdbm_strerror(gdbm_errno));
-    		} else if (ret == 0) {
-                strcpy(Parameters,"1");
-            }
-
-            node_itr->second.act = time(NULL);
-
-        } else {
-	        Log(0,"WARNING: DELETE: Could not find open GDBM database name [%s]\n",name);
-        }
-
+	if ((Parameters==NULL)||(*Parameters=='\0')) {
+		Log(0,"ERROR: Missing ALL arguments to DELETE method\n");
+		return NULL;
 	}
-
-    free(arg);
-
+	char* arg = strdup(Parameters);
+	strcpy(Parameters,"0");
+	char* arglst[3];
+	split_on_char(arg,arglst,3,NWNX_GDBM_ARGSEP);
+	Log(3,"DB: DELETE: db_name [%s], db_open [%s], db_key [%s]\n", arglst[0], arglst[1], arglst[2]);
+	for (int i=0; i<3; i++) {
+		if ( !arglst[i] || (*arglst[i]=='\0') ) {
+			Log(0,"ERROR: Missing argument %d to DELETE in [%s]\n",i,Parameters);
+			free(arg);
+			return NULL;
+		}
+	}
+	//char* db_key = ConvertKeySeparatorToNull(gdbm.sco_rco_arg_db_key.c_str());
+	gdbm_datum_t db_key(arglst[3],arglst[3]+strlen(arglst[3]));
+	for (size_t i=0; i<db_key.size(); i++) if (db_key[i]==NWNX_GDBM_KEYSEP) db_key[i]='\0';
+    if ( gdbmpool->erase(arglst[0], db_key, (*arglst[2]=='1')) ) {
+		Log(3,"DB: DELETE: db_name [%s], db_key [%s], Key Deleted\n", arglst[0], arglst[1]);
+		strcpy(Parameters,"1");
+	} else {
+		Log(3,"DB: DELETE: db_name [%s], db_key [%s], Key NOT Found/Deleted\n", arglst[0], arglst[1]);
+	}
+	free(arg);
 	return NULL;
 }
 
-
-/* TODO */
-
-// Arg 1 - the name of the database
-// Ret   - the first key
 //
-char* CNWNXgdbm::FirstKey(char* gameObject, char* Parameters)
+// Object handling methods.
+//
+
+//  Event handler for NWNX plugin API initialization event.
+//
+int CNWNXgdbm::PluginsLoaded_EventHandler(WPARAM p, LPARAM a)
 {
-    Log(0,"ERROR: FIRSTKEY: Call to unimplemented feature with [%s]\n",Parameters);
-    return NULL;
+	// Register GDBM plugin event callbacks with the NWNX plugin API
+	// requesting notification on SCO and RCO events.
+	//
+	HANDLE handleSCO = HookEvent("NWServer/SCO", SCO_EventHandler);
+	HANDLE handleRCO = HookEvent("NWServer/RCO", RCO_EventHandler);
+	if ( !handleSCO || !handleRCO ) {
+		gdbm.Log(0,"ERROR: Unable to register NWServer/SCO and/or NWServer/RCO event handlers.\n");
+		gdbm.cfg_use_scorco = false;
+	}
+	gdbm.Log(2,"INFO: NWServer/SCO and NWServer/RCO event handlers registered without error.\n");
+	return 0;
 }
 
-// Arg 1 - the name of the database
-// Ret   - the next key
-//
-char* CNWNXgdbm::NextKey(char* gameObject, char* Parameters)
+// return nothing
+char* CNWNXgdbm::SetObjectArguments(char* gameObject, char* Parameters)
 {
-    Log(0,"ERROR: NEXTKEY: Call to unimplemented feature with [%s]\n",Parameters);
-    return NULL;
+	if ( !cfg_use_scorco ) {
+		Log(0,"ERROR: Attempt to call SETOBJARG when SCO/RCO handler is disabled.\n");
+		return NULL;
+	}
+	if ((Parameters==NULL)||(*Parameters=='\0')) {
+		Log(0,"ERROR: Missing ALL arguments to SETOBJARG method\n");
+		return NULL;
+	}
+	gdbm.Log(3,"DB: SETOBJARG: SCO/RCO Set Object Key, Parameters [%s].\n", Parameters);
+    char* arg = strdup(Parameters);
+    char* arglst[4];
+    split_on_char(arg,arglst,4,NWNX_GDBM_ARGSEP);
+	for (int i=0; i<4; i++) {
+		if ( !arglst[i] || (*arglst[i]=='\0') ) {
+			Log(0,"ERROR: Missing argument %d to SETOBJARG in [%s]\n",i,Parameters);
+			free(arg);
+			return NULL;
+		}
+	}
+    sco_rco_arg_db_name = arglst[0];
+    sco_rco_arg_db_replace = (*arglst[1]=='1');
+    sco_rco_arg_db_open = (*arglst[2]=='1');
+    sco_rco_arg_db_key = arglst[3];
+	return NULL;
 }
 
+// These are the implementations of the SCO (StoreCampaignObject) and RCO
+// (RestoreCampaignObject) event handlers for the GDBM plugin. They are
+// callback functions registered with the new NWNX plugin API to be notified
+// on "SCO" or "RCO" events published by the ODMBC plugin.
 //
-// Parser for length specified argument bundles. This is needed when more than the 
-// last argument passed via the SetLocalString could have unsafe user input text
-// Currently only required for the store op since it requires both a key and a 
-// value which could potentially contain parse tokens.
-//
-// Takes a mutable argument list of chars* in the form "len1|str1|len2|str2|" and
-// returns array of ptrs to null terminated args. Nulls are embedded in the passed
-// string and the pointers reference offsets in the passed argument string.
-//
-char** CNWNXgdbm::UnBundleArguments(char* args) {
+int CNWNXgdbm::SCO_EventHandler(WPARAM p, LPARAM a)
+{
+	if ( !gdbm.cfg_use_scorco ) {
+		gdbm.Log(0,"ERROR: Attempt to call SCO when SCO/RCO handler is disabled.\n");
+		return NULL;
+	}
 
-    int i = 0;
-    int len = 0;
+	// Get the callback event structure and check if the event is for this plugin.
+	//
+	SCORCOStruct* s = (SCORCOStruct*) p;
+	gdbm.Log(3,"DB: SCO_EventHandler: event notification for service [%s].\n", s->key);
+	if ( strcmp("GDBM", s->key) != 0 ) return 0; // Decline event if not for GDBM plugin
+	gdbm.Log(3,"DB: SCO_EventHandler: event notification for GDBM.\n");
 
-    char* p = args;
-    char* q = NULL;
+	// Check that valid arguments were set by a prior call to SETOBJARG.
+	//
+	if ( (gdbm.sco_rco_arg_db_name.length()==0) || (gdbm.sco_rco_arg_db_key.length()==0) ) {
+		gdbm.Log(0,"ERROR: SCO_EventHandler: event notification with missing SCO/RCO Argument.\n");
+		return 1; // Indicate the event was accepted by this handler
+	}
+	gdbm.Log(3,"DB: SCO_EventHandler: DB [%s], Key [%s].\n", gdbm.sco_rco_arg_db_name.c_str(), gdbm.sco_rco_arg_db_key.c_str());
+	
+	//char* db_key = strdup(gdbm.sco_rco_arg_db_key.c_str());
+	//size_t db_key_size = strlen(db_key);
+	//char* ptr = db_key; while (*ptr) if (*ptr=='0x1f') { *ptr=='\0'; ptr++; }
+	//for ( char* p=db_key; *p!='\0';  p++ ) if (*p=='0x1f') *p='\0';
 
-    while (*p!='\0') {
-        q = strchr(p,'|');
-        if (q==NULL) break; // format error
-        *q = '\0';
-        q++;
-        if (sscanf(p,"%d",&len)<1) break; // format error
-		//Log(5,"i %d, len [%d]\n",i,len);
-        p = q + len;
-        *p = '\0';
-        p++;
-		//Log(5,"i %d, arg [%s]\n",i,q);
-        _arg_list[i] = q;
-        i++;
-        if (i > 9) break; // max args
-    }
-    _arg_list[i] = NULL; 
-    return _arg_list;
+	//char* s = gdbm.sco_rco_arg_db_key.c_str();
+	//size_t n = strlen(s);
+	//char* d = (char*)malloc(n+1);
+	//for (int i=0; i<=n; i++) if (s[i]=='0x1f') d[i]='\0'; else d[i]=s[i];
+
+	// Store the object
+	//
+	gdbm.Log(3,"DB: SCO_EventHandler: Storing Object [%s], Length [%d].\n", s->pData, s->size);
+	char* db_key = ConvertKeySeparatorToNull(gdbm.sco_rco_arg_db_key.c_str());
+	bool ok = gdbm.gdbmpool->store(
+		gdbm.sco_rco_arg_db_name.c_str(),
+		db_key,
+		(const char*)s->pData, s->size,
+		gdbm.sco_rco_arg_db_replace, gdbm.sco_rco_arg_db_open
+	);
+    if ( ok ) {
+		gdbm.Log(3,"DB: SCO_EventHandler: db_name [%s], db_key [%s], OBJECT inserted/updated\n",
+			gdbm.sco_rco_arg_db_name.c_str(), gdbm.sco_rco_arg_db_key.c_str());
+	} else {
+		gdbm.Log(3,"DB: SCO_EventHandler: db_name [%s], db_key [%s], OBJECT was NOT inserted/updated, already exists\n",
+			gdbm.sco_rco_arg_db_name.c_str(), gdbm.sco_rco_arg_db_key.c_str());
+	}
+	free(db_key);
+
+	return 1; // Indicate the event was accepted by this handler
+}
+
+int CNWNXgdbm::RCO_EventHandler(WPARAM p, LPARAM a)
+{
+	if ( !gdbm.cfg_use_scorco ) {
+		gdbm.Log(0,"ERROR: Attempt to call RCO when SCO/RCO handler is disabled.\n");
+		return NULL;
+	}
+
+	// Get the callback event structure and check if the event is for this plugin.
+	//
+	SCORCOStruct* s = (SCORCOStruct*) p;
+	gdbm.Log(3,"DB: RCO_EventHandler: event notification for service [%s].\n", s->key);
+	if ( strcmp("GDBM", s->key) != 0 ) return 0; // Decline event if not for GDBM plugin
+	gdbm.Log(3,"DB: RCO_EventHandler: event notification for GDBM.\n");
+
+	// Set return parameters for error conditions.
+	//
+	s->pData = NULL;
+	s->size = 0;
+
+	// Check that valid arguments were set by a prior call to SETOBJARG.
+	//
+	if ( (gdbm.sco_rco_arg_db_name.length()==0) || (gdbm.sco_rco_arg_db_key.length()==0) ) {
+		gdbm.Log(0,"ERROR: RCO_EventHandler: event notification with missing SCO/RCO Argument.\n");
+		return 1;
+	}
+	gdbm.Log(3,"DB: RCO_EventHandler: DB [%s], Key [%s].\n", gdbm.sco_rco_arg_db_name.c_str(), gdbm.sco_rco_arg_db_key.c_str());
+
+
+	// Retrieve the object
+	//
+	gdbm.Log(3,"DB: RCO_EventHandler: Retrieving Object.\n");
+	char* db_key = ConvertKeySeparatorToNull(gdbm.sco_rco_arg_db_key.c_str());
+	char* db_value = NULL;
+	size_t db_value_size = 0;
+	bool ok = gdbm.gdbmpool->fetch(
+		gdbm.sco_rco_arg_db_name.c_str(),
+		db_key,
+		&db_value, &db_value_size,
+		gdbm.sco_rco_arg_db_open
+	);
+    if ( ok ) {
+		gdbm.Log(3,"DB: RCO_EventHandler: db_name [%s], db_key [%s], OBJECT Found, Object [%s], Size [%u]\n",
+			gdbm.sco_rco_arg_db_name.c_str(), gdbm.sco_rco_arg_db_key.c_str(), db_value, db_value_size);
+	} else {
+		gdbm.Log(3,"DB: RCO_EventHandler: db_name [%s], db_key [%s], OBJECT was NOT Found\n",
+			gdbm.sco_rco_arg_db_name.c_str(), gdbm.sco_rco_arg_db_key.c_str());
+		free(db_value);
+		return 1;
+	}
+	free(db_key);
+
+	// This should never be any object except one we stored, so the object should
+	// always be a good one. However, since NWN is known to crash in some senarios
+	// with bad GFF files, make a small effort to check validity.
+	//
+	// Known GFF IDs: "UTI V3.28","BIC V3.28","UTP V3.28","UTM V3.28","UTT V3.28"
+	//
+	if ( db_value[4]!='V' || db_value[5]!='3' || db_value[6]!='.' || db_value[7]!='2' || db_value[8]!='8' ) {
+		gdbm.Log(0,"ERROR: RCO_EventHandler: Object found is not recognized GFF data.\n");
+		free(db_value);
+		return 1;
+	}
+
+	// GDBM mallocs memory returned by the fetch function so returned sent via
+	// the pData value the NWN engine should free it correctly.
+	//
+	s->pData = (unsigned char*)db_value;
+	s->size = db_value_size;
+
+	gdbm.Log(3,"DB: RCO_EventHandler, Retrieved GFF Object [%08x], Size [%u]\n", s->pData, s->size);
+
+	return 1; // Indicate the event was accepted by this handler
+}
+
+static char* ConvertKeySeparatorToNull (const char* s)
+{
+	size_t n = strlen(s);
+	char* d = (char*)malloc(n+1);
+	for (size_t i=0; i<=n; i++) if (s[i]==NWNX_GDBM_KEYSEP) d[i]='\0'; else d[i]=s[i];
+	return d;
+}
+
+static char* ConvertNullToKeySeparator (const char* s)
+{
+	size_t n = strlen(s);
+	char* d = (char*)malloc(n+1);
+	for (size_t i=0; i<=n; i++) if (s[i]=='\0') d[i]=NWNX_GDBM_KEYSEP; else d[i]=s[i];
+	return d;
+}
+
+static char* split_on_char (char* tokstr, char** toklst, unsigned int toklstlen, char toksep)
+{
+	register unsigned int i;
+	register char* p;
+	if ( !tokstr || !toklst || (toklstlen <= 0) ) return 0;
+	p = toklst[0] = tokstr;
+	for (i = 1; i < toklstlen; i++) {
+		while ( (*p != '\0') && (*p != toksep) ) p++;
+		if (*p == toksep) { *p++ = '\0'; toklst[i] = p; continue; }
+		toklst[i] = 0;
+	}
+	return tokstr;
 }
 

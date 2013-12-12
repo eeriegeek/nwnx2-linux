@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 2.6)
 
 set(CMAKE_VERBOSE_MAKEFILE on)
 
@@ -16,11 +16,14 @@ if (GDBM_FOUND)
 
     include_directories(${GDBM_INCLUDE_DIR})
 
-    add_module(gdbm NWNXgdbm plugin-gdbm)
+    add_module(gdbm GdbmPool NWNXgdbm plugin-gdbm)
     target_link_libraries(gdbm ${GDBM_LIBRARIES})
 
  	add_executable(gdbm2dump gdbm2dump.cpp)
     target_link_libraries(gdbm2dump ${GDBM_LIBRARIES})
+
+ 	add_executable(test_gdbmpool GdbmPool test_gdbmpool.cpp)
+    target_link_libraries(test_gdbmpool ${GDBM_LIBRARIES})
 
 else (GDBM_FOUND)
         message(WARNING "GDBM installation not found, will not build the GDBM plugin!")

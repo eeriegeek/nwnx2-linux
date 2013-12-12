@@ -14,6 +14,44 @@ advanced data storage in an RDBMS. It could serve as means to fix some of
 the limitations on speed and key size for a growing server not ready to move
 to a SQL server or as a temporary index for some larger processing task.
 
+A number of limitation in the default DBF file design have been identified
+over the years. This plugin attempts to address some of those limitations.
+
+1. Key Size Limitation - Keys (VarName) in the Bioware Campaign DB are
+defined as "VARNAME,C,32" a length limit of 32 characters. For basic use this
+is fine, but when doing more complex storage with compound keys, the limit
+is easy to excced. This GDBM based plugin has no finite limit on key size except those
+imposed by memory and storage space.
+
+2. Per PC Data Key Limitation - As with the key size Limitation, the bioware campaign
+db ("PLAYERID,C,32") places a 32 character size limit on the key used to 
+uniquely identify per PC data. The player name and character name are used as a key,
+but the combined key is truncated to 32 chars. Because the key size is unlimited,
+the unique player id info can be combined in a compound key with the variable
+name with unlimited length. A set of functions implementing this pattern is
+in nwnx_gdbm_bio.nss. 
+
+3. Type Collision - In the Bioware Campaign DB different types are keyed to the
+same storage record. If an Int named "foo" is stored, it overwrites the
+previously stored string named "foo". Here, the type is added to the key,
+so variables of different types can no longer effect each other even if they
+have the same name. As part of this extention, Type specific delete operations
+have been added.
+
+4. DBF File Growth - The DBF system used by BioWare uses a deletion mark 
+in combination with an external database garbage collector to manage
+deleted records. GDBM manages deleted space internally, re-using space
+freed by deleted records. Note that GDBM does not shrink the actual
+disk file unless the reorganise function is called. This is not needed
+on stable or growing databases, only those which have lost large 
+amounts of total data through excess deletion.
+
+5. Object Storage - The basic Campaign functions allow storage of Items
+and Creatures. These types have been expanded in NWNX2 by virusman to
+include Placeables, Merchants and Triggers. This GDBM plugin uses the
+extend plugin API to provide support for storage of these additional
+object types.
+
 Installation:
 
 Unpack the plugin in the NWNX plugins directory. Make sure you have the GDBM
@@ -77,9 +115,6 @@ to dump the data in SQL insert statement form for migration into an RDBMS.
 
 Future:
 
- TODO: Object support. The current GDBM plugin does not support object
- storage. The plan is to add this as soon as possible.
- 
  TODO:  Pool limiting, currently there is no finite limit to the pool map
  size. The pool of open gdbm files will grow to consume all fd's unless 
  files are closed. This is ok, but lightly dangerous. A timestamp field
@@ -88,9 +123,6 @@ Future:
 
  TODO: Implement the iterator functions. A datum iterator is included in
  the GDBM node structure for this.
-
- TODO: Use the perfect hash generator to generate the function lookups.
- Probably not really needed, the if statements are plenty fast.
 
  TODO: Utility to dump/restore to flat file. Dump to SQL.
 
