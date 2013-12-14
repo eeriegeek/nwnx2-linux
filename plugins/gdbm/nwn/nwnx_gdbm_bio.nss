@@ -2,7 +2,7 @@
 
   nwnx_gdbm_bio - NWNX - GDBM Plugin - Bioware DB compatibility layer.
 
-  Copyright 2012 eeriegeek (eeriegeek@yahoo.com)
+  Copyright 2012-2013 eeriegeek (eeriegeek@yahoo.com)
 
   This file is part of NWNX.
 
@@ -50,275 +50,337 @@
 //
 // Store a persistent variable. Creates a database file if none exists.
 //
-void GDBM_SetCampaignString(string sCampaignName, string sVarName, string sString, object oPlayer=OBJECT_INVALID);
-void GDBM_SetCampaignInt(string sCampaignName, string sVarName, int nInt, object oPlayer=OBJECT_INVALID);
-void GDBM_SetCampaignFloat(string sCampaignName, string sVarName, float flFloat, object oPlayer=OBJECT_INVALID);
-void GDBM_SetCampaignVector(string sCampaignName, string sVarName, vector vVector, object oPlayer=OBJECT_INVALID);
-void GDBM_SetCampaignLocation(string sCampaignName, string sVarName, location locLocation, object oPlayer=OBJECT_INVALID);
+void NWNX_GDBM_SetCampaignString(string sCampaignName, string sVarName, string sString, object oPlayer=OBJECT_INVALID);
+void NWNX_GDBM_SetCampaignInt(string sCampaignName, string sVarName, int nInt, object oPlayer=OBJECT_INVALID);
+void NWNX_GDBM_SetCampaignFloat(string sCampaignName, string sVarName, float flFloat, object oPlayer=OBJECT_INVALID);
+void NWNX_GDBM_SetCampaignVector(string sCampaignName, string sVarName, vector vVector, object oPlayer=OBJECT_INVALID);
+void NWNX_GDBM_SetCampaignLocation(string sCampaignName, string sVarName, location locLocation, object oPlayer=OBJECT_INVALID);
+
+int NWNX_GDBM_StoreCampaignObject(string sCampaignName, string sVarName, object oObject, object oPlayer=OBJECT_INVALID);
 
 //
 // Retrieve a persistent variable. Returns an empty/invalid value if not found.
 //
-string GDBM_GetCampaignString(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
-int GDBM_GetCampaignInt(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
-float GDBM_GetCampaignFloat(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
-vector GDBM_GetCampaignVector(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
-location GDBM_GetCampaignLocation(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
+string NWNX_GDBM_GetCampaignString(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
+int NWNX_GDBM_GetCampaignInt(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
+float NWNX_GDBM_GetCampaignFloat(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
+vector NWNX_GDBM_GetCampaignVector(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
+location NWNX_GDBM_GetCampaignLocation(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
+
+object NWNX_GDBM_RetrieveCampaignObject(string sCampaignName, string sVarName, location locLocation, object oOwner=OBJECT_INVALID, object oPlayer=OBJECT_INVALID);
 
 //
 // Delete a persistent variable.
 //
-void GDBM_DeleteCampaignString(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
-void GDBM_DeleteCampaignInt(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
-void GDBM_DeleteCampaignFloat(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
-void GDBM_DeleteCampaignVector(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
-void GDBM_DeleteCampaignLocation(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
+void NWNX_GDBM_DeleteCampaignString(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
+void NWNX_GDBM_DeleteCampaignInt(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
+void NWNX_GDBM_DeleteCampaignFloat(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
+void NWNX_GDBM_DeleteCampaignVector(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
+void NWNX_GDBM_DeleteCampaignLocation(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
+
+void NWNX_GDBM_DeleteCampaignObject(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
 
 //
 // This version of delete operates as the standard one, deleting all variables
 // associated with the given key regardless of the variable's base type.
 //
-void GDBM_DeleteCampaignVariable(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
+void NWNX_GDBM_DeleteCampaignVariable(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID);
 
 //
 // Deletes the entire database file.
 //
-void GDBM_DestroyCampaignDatabase(string sCampaignName);
+void NWNX_GDBM_DestroyCampaignDatabase(string sCampaignName);
 
 
 //
 // Implementation
 //
 
-void GDBM_SetCampaignString(string sCampaignName, string sVarName, string sString, object oPlayer=OBJECT_INVALID)
+// Collapse constant strings to reduce instruction count.
+string NWNX_GDBM_T1T   = NWNX_GDBM_ARGSEP + "1" + NWNX_GDBM_ARGSEP;
+string NWNX_GDBM_T1T1T = NWNX_GDBM_ARGSEP + "1" + NWNX_GDBM_ARGSEP + "1" + NWNX_GDBM_ARGSEP;
+
+void NWNX_GDBM_SetCampaignString(string sCampaignName, string sVarName, string sString, object oPlayer=OBJECT_INVALID)
 {
     string sKey;
     if ( oPlayer != OBJECT_INVALID ) {
         sKey += GetPCPlayerName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
         sKey += GetName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
     } 
     sKey += sVarName;
-    NWNX_GdbmStoreString(sCampaignName,sKey,sString);
+    sKey += NWNX_GDBM_KEYSEP;
+    sKey += "S";
+    SetLocalString(
+        GetModule(),
+        "NWNX!GDBM!STORE",
+        sCampaignName + NWNX_GDBM_T1T1T + sKey + NWNX_GDBM_ARGSEP + sString
+    );
+    // Skip check of status code, since we igore it anyway in this method.
+    //NWNX_GDBM_StoreString(sCampaignName,sKey,sString);
 }
-string GDBM_GetCampaignString(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
+string NWNX_GDBM_GetCampaignString(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
 {
     string sKey;
     if ( oPlayer != OBJECT_INVALID ) {
         sKey += GetPCPlayerName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
         sKey += GetName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
     }
     sKey += sVarName;
-    return(NWNX_GdbmFetchString(sCampaignName,sKey));
+    sKey += NWNX_GDBM_KEYSEP;
+    sKey += "S";
+    SetLocalString(
+        GetModule(),
+        "NWNX!GDBM!FETCH",
+        sCampaignName + NWNX_GDBM_T1T + sKey
+    );
+    return GetLocalString(GetModule(),"NWNX!GDBM!FETCH");
+    //return(NWNX_GDBM_FetchString(sCampaignName,sKey));
 }
 
-void GDBM_SetCampaignInt(string sCampaignName, string sVarName, int nInt, object oPlayer=OBJECT_INVALID)
+void NWNX_GDBM_SetCampaignInt(string sCampaignName, string sVarName, int nInt, object oPlayer=OBJECT_INVALID)
 {
     string sKey;
     if ( oPlayer != OBJECT_INVALID ) {
         sKey += GetPCPlayerName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
         sKey += GetName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
     } 
     sKey += sVarName;
-    NWNX_GdbmStoreInt(sCampaignName,sKey,nInt);
+    sKey += NWNX_GDBM_KEYSEP;
+    sKey += "I";
+    SetLocalString(
+        GetModule(),
+        "NWNX!GDBM!STORE",
+        sCampaignName + NWNX_GDBM_T1T1T + sKey + NWNX_GDBM_ARGSEP + IntToString(nInt)
+    );
+    // Skip check of status code, since we igore it anyway in this method.
+    //NWNX_GDBM_StoreInt(sCampaignName,sKey,nInt);
 }
-int GDBM_GetCampaignInt(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
+int NWNX_GDBM_GetCampaignInt(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
 {
     string sKey;
     if ( oPlayer != OBJECT_INVALID ) {
         sKey += GetPCPlayerName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
         sKey += GetName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
     }
     sKey += sVarName;
-    return(NWNX_GdbmFetchInt(sCampaignName,sKey));
+    sKey += NWNX_GDBM_KEYSEP;
+    sKey += "I";
+    SetLocalString(
+        GetModule(),
+        "NWNX!GDBM!FETCH",
+        sCampaignName + NWNX_GDBM_T1T + sKey
+    );
+    return StringToInt(GetLocalString(GetModule(),"NWNX!GDBM!FETCH"));
+    //return(NWNX_GDBM_FetchInt(sCampaignName,sKey));
 }
 
-void GDBM_SetCampaignFloat(string sCampaignName, string sVarName, float flFloat, object oPlayer=OBJECT_INVALID)
+void NWNX_GDBM_SetCampaignFloat(string sCampaignName, string sVarName, float flFloat, object oPlayer=OBJECT_INVALID)
 {
     string sKey;
     if ( oPlayer != OBJECT_INVALID ) {
         sKey += GetPCPlayerName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
         sKey += GetName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
     }
     sKey += sVarName;
-    NWNX_GdbmStoreFloat(sCampaignName,sKey,flFloat);
+    NWNX_GDBM_StoreFloat(sCampaignName, sKey, flFloat);
 }
-float GDBM_GetCampaignFloat(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
+float NWNX_GDBM_GetCampaignFloat(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
 {
     string sKey;
     if ( oPlayer != OBJECT_INVALID ) {
         sKey += GetPCPlayerName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
         sKey += GetName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
     }
     sKey += sVarName;
-    return(NWNX_GdbmFetchFloat(sCampaignName,sKey));
+    return NWNX_GDBM_FetchFloat(sCampaignName, sKey);
 }
 
-void GDBM_SetCampaignVector(string sCampaignName, string sVarName, vector vVector, object oPlayer=OBJECT_INVALID)
+void NWNX_GDBM_SetCampaignVector(string sCampaignName, string sVarName, vector vVector, object oPlayer=OBJECT_INVALID)
 {
     string sKey;
     if ( oPlayer != OBJECT_INVALID ) {
         sKey += GetPCPlayerName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
         sKey += GetName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
     }
     sKey += sVarName;
-    NWNX_GdbmStoreVector(sCampaignName,sKey,vVector);
+    NWNX_GDBM_StoreVector(sCampaignName, sKey, vVector);
 }
-vector GDBM_GetCampaignVector(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
+vector NWNX_GDBM_GetCampaignVector(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
 {
     string sKey;
     if ( oPlayer != OBJECT_INVALID ) {
         sKey += GetPCPlayerName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
         sKey += GetName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
     }
     sKey += sVarName;
-    return(NWNX_GdbmFetchVector(sCampaignName,sKey));
+    return NWNX_GDBM_FetchVector(sCampaignName, sKey);
 }
 
-void GDBM_SetCampaignLocation(string sCampaignName, string sVarName, location locLocation, object oPlayer=OBJECT_INVALID)
+void NWNX_GDBM_SetCampaignLocation(string sCampaignName, string sVarName, location locLocation, object oPlayer=OBJECT_INVALID)
 {
     string sKey;
     if ( oPlayer != OBJECT_INVALID ) {
         sKey += GetPCPlayerName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
         sKey += GetName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
     }
     sKey += sVarName;
-    NWNX_GdbmStoreLocation(sCampaignName,sKey,locLocation);
+    NWNX_GDBM_StoreLocation(sCampaignName, sKey, locLocation);
 }
-location GDBM_GetCampaignLocation(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
+location NWNX_GDBM_GetCampaignLocation(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
 {
     string sKey;
     if ( oPlayer != OBJECT_INVALID ) {
         sKey += GetPCPlayerName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
         sKey += GetName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
     }
     sKey += sVarName;
-    return(NWNX_GdbmFetchLocation(sCampaignName,sKey));
+    return NWNX_GDBM_FetchLocation(sCampaignName, sKey);
 }
 
-int GDBM_StoreCampaignObject(string sCampaignName, string sVarName, object oObject, object oPlayer=OBJECT_INVALID);
-int GDBM_StoreCampaignObject(string sCampaignName, string sVarName, object oObject, object oPlayer=OBJECT_INVALID)
+int NWNX_GDBM_StoreCampaignObject(string sCampaignName, string sVarName, object oObject, object oPlayer=OBJECT_INVALID)
 {
-    return 0;
+    string sKey;
+    if ( oPlayer != OBJECT_INVALID ) {
+        sKey += GetPCPlayerName(oPlayer);
+        sKey += NWNX_GDBM_KEYSEP;
+        sKey += GetName(oPlayer);
+        sKey += NWNX_GDBM_KEYSEP;
+    }
+    sKey += sVarName;
+    return NWNX_GDBM_StoreObject(sCampaignName, sKey, oObject);
 }
-object GDBM_RetrieveCampaignObject(string sCampaignName, string sVarName, location locLocation, object oOwner=OBJECT_INVALID, object oPlayer=OBJECT_INVALID);
-object GDBM_RetrieveCampaignObject(string sCampaignName, string sVarName, location locLocation, object oOwner=OBJECT_INVALID, object oPlayer=OBJECT_INVALID)
+object NWNX_GDBM_RetrieveCampaignObject(string sCampaignName, string sVarName, location locLocation, object oOwner=OBJECT_INVALID, object oPlayer=OBJECT_INVALID)
 {
-    return OBJECT_INVALID;
+    string sKey;
+    if ( oPlayer != OBJECT_INVALID ) {
+        sKey += GetPCPlayerName(oPlayer);
+        sKey += NWNX_GDBM_KEYSEP;
+        sKey += GetName(oPlayer);
+        sKey += NWNX_GDBM_KEYSEP;
+    }
+    sKey += sVarName;
+    return NWNX_GDBM_FetchObject(sCampaignName, sKey, locLocation, oOwner);
 }
 
-void GDBM_DeleteCampaignString(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
+//
+// Delete
+//
+void NWNX_GDBM_DeleteCampaignString(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
 {
     string sKey;
     if ( oPlayer != OBJECT_INVALID ) {
         sKey += GetPCPlayerName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
         sKey += GetName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
     }
     sKey += sVarName;
-    NWNX_GdbmDeleteString(sCampaignName,sKey);
+    NWNX_GDBM_DeleteString(sCampaignName,sKey);
 }
-void GDBM_DeleteCampaignInt(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
+void NWNX_GDBM_DeleteCampaignInt(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
 {
     string sKey;
     if ( oPlayer != OBJECT_INVALID ) {
         sKey += GetPCPlayerName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
         sKey += GetName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
     }
     sKey += sVarName;
-    NWNX_GdbmDeleteInt(sCampaignName,sKey);
+    NWNX_GDBM_DeleteInt(sCampaignName,sKey);
 }
-void GDBM_DeleteCampaignFloat(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
+void NWNX_GDBM_DeleteCampaignFloat(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
 {
     string sKey;
     if ( oPlayer != OBJECT_INVALID ) {
         sKey += GetPCPlayerName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
         sKey += GetName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
     }
     sKey += sVarName;
-    NWNX_GdbmDeleteFloat(sCampaignName,sKey);
+    NWNX_GDBM_DeleteFloat(sCampaignName,sKey);
 }
-void GDBM_DeleteCampaignVector(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
+void NWNX_GDBM_DeleteCampaignVector(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
 {
     string sKey;
     if ( oPlayer != OBJECT_INVALID ) {
         sKey += GetPCPlayerName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
         sKey += GetName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
     }
     sKey += sVarName;
-    NWNX_GdbmDeleteVector(sCampaignName,sKey);
+    NWNX_GDBM_DeleteVector(sCampaignName,sKey);
 }
-void GDBM_DeleteCampaignLocation(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
+void NWNX_GDBM_DeleteCampaignLocation(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
 {
     string sKey;
     if ( oPlayer != OBJECT_INVALID ) {
         sKey += GetPCPlayerName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
         sKey += GetName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
     }
     sKey += sVarName;
-    NWNX_GdbmDeleteLocation(sCampaignName,sKey);
+    NWNX_GDBM_DeleteLocation(sCampaignName,sKey);
 }
-void GDBM_DeleteCampaignObject(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
+void NWNX_GDBM_DeleteCampaignObject(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
 {
     string sKey;
     if ( oPlayer != OBJECT_INVALID ) {
         sKey += GetPCPlayerName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
         sKey += GetName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
+        sKey += NWNX_GDBM_KEYSEP;
     }
     sKey += sVarName;
-    NWNX_GdbmDeleteObject(sCampaignName,sKey);
-}
-
-void GDBM_DeleteCampaignVariable(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
-{
-    string sKey;
-    if ( oPlayer != OBJECT_INVALID ) {
-        sKey += GetPCPlayerName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
-        sKey += GetName(oPlayer);
-        sKey += NWNX_GDBM_KEYTOK;
-    }
-    sKey += sVarName;
-    NWNX_GdbmDeleteString(sCampaignName,sKey);
-    NWNX_GdbmDeleteInt(sCampaignName,sKey);
-    NWNX_GdbmDeleteFloat(sCampaignName,sKey);
-    NWNX_GdbmDeleteVector(sCampaignName,sKey);
-    NWNX_GdbmDeleteLocation(sCampaignName,sKey);
-    NWNX_GdbmDeleteObject(sCampaignName,sKey);
+    NWNX_GDBM_DeleteObject(sCampaignName,sKey);
 }
 
-void GDBM_DestroyCampaignDatabase(string sCampaignName)
+void NWNX_GDBM_DeleteCampaignVariable(string sCampaignName, string sVarName, object oPlayer=OBJECT_INVALID)
 {
-    NWNX_GdbmDestroy(sCampaignName);
+    string sKey;
+    if ( oPlayer != OBJECT_INVALID ) {
+        sKey += GetPCPlayerName(oPlayer);
+        sKey += NWNX_GDBM_KEYSEP;
+        sKey += GetName(oPlayer);
+        sKey += NWNX_GDBM_KEYSEP;
+    }
+    sKey += sVarName;
+    NWNX_GDBM_DeleteString(sCampaignName,sKey);
+    NWNX_GDBM_DeleteInt(sCampaignName,sKey);
+    NWNX_GDBM_DeleteFloat(sCampaignName,sKey);
+    NWNX_GDBM_DeleteVector(sCampaignName,sKey);
+    NWNX_GDBM_DeleteLocation(sCampaignName,sKey);
+    NWNX_GDBM_DeleteObject(sCampaignName,sKey);
+}
+
+//
+// Destroy
+//
+void NWNX_GDBM_DestroyCampaignDatabase(string sCampaignName)
+{
+    NWNX_GDBM_Destroy(sCampaignName);
 }
 

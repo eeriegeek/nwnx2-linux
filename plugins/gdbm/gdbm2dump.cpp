@@ -54,7 +54,14 @@ int main(int argc, char **argv)
 
       i++;
       val = gdbm_fetch(dbf,key);
-      fprintf(out,"|%d|%s|%d|%s|\n",strlen(key.dptr),key.dptr,strlen(val.dptr),val.dptr);
+      //fprintf(out,"|%d|%s|%d|%s|\n",strlen(key.dptr),key.dptr,strlen(val.dptr),val.dptr);
+
+      bigbuf[0]='\0';
+      fprintf(out,"|%d|",key.dsize);
+      fwrite(key.dptr,key.dsize,1,out);
+      fprintf(out,"|%d|",val.dsize);
+      fwrite(val.dptr,val.dsize,1,out);
+      fprintf(out,"|\n");
 
       key = gdbm_nextkey(dbf,key);
 

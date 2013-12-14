@@ -1,5 +1,5 @@
-#ifndef NWNXgdbm_H_
-#define NWNXgdbm_H_
+#ifndef _NWNXgdbm_h_
+#define _NWNXgdbm_h_
 /******************************************************************************
 
   NWNXgdbm.h - Include file for GDBM plugin for NWNX.
@@ -24,16 +24,7 @@
 ******************************************************************************/
 
 #include "NWNXBase.h"
-
 #include "GdbmPool.h"
-
-// It's difficult to get a verifiable max length for the NWN player_name and
-// character_name, since they are constrained by proportional font width.
-// The maximum appears experimentally to be around 260 for first+last name.
-// Player name similar. Size 1024 should be large enough for common use
-// cases.
-//
-#define SCO_RCO_OBJECT_ARGS_MAX_LEN 1024
 
 // Main NWNX GDBM plugin object
 //
@@ -49,7 +40,7 @@ class CNWNXgdbm : public CNWNXBase
 		bool OnRelease();
 
 	private:
-					
+
 		char* Create(char* gameObject, char* Parameters);
 		char* Reorganize(char* gameObject, char* Parameters);
 		char* Destroy(char* gameObject, char* Parameters);
@@ -64,6 +55,8 @@ class CNWNXgdbm : public CNWNXBase
 		char* Fetch(char* gameObject, char* Parameters);
 		char* Delete(char* gameObject, char* Parameters);
 
+		bool ParseDelimitedArgumentList(char* argstr, char** arglst, int argcnt);
+
 		char* SetObjectArguments(char* gameObject, char* Parameters);
 
 		// Set up event callbacks for the new plugin API for SCO/RCO handling.
@@ -72,31 +65,26 @@ class CNWNXgdbm : public CNWNXBase
 		static int SCO_EventHandler(WPARAM p, LPARAM a);
 		static int RCO_EventHandler(WPARAM p, LPARAM a);
 
-		// Buffer to handle longish file pathnames. Will malloc in constructor.
-		//
-		char* tmp_filepath;
-
 		// Configuration parameters.
 		//
 		char* server_home;     // save the servers home directory
 		char* cfg_filepath;    // default is "$server_home/database"
-		bool cfg_sync_write;   // default is TRUE (GDBM_SYNC)
-		bool cfg_lock_file;    // default is FALSE (GDBM_NOLOCK)
+		bool cfg_sync_write;   // default is TRUE => (GDBM_SYNC)
+		bool cfg_lock_file;    // default is FALSE => (GDBM_NOLOCK)
 		bool cfg_use_scorco;   // default is TRUE, hook handler into SCO/RCO
 
-		// Maintain a pool of open GDBF files.
+		// Maintain a pool of open GDBF files for efficiency.
 		//
 		GdbmPool* gdbmpool;
 
 		// Holds the last set of arguments specified for the next call to
-		// SCO or RCO. (SCO/RCO don't have space for the argument string.
+		// SCO or RCO. (SCO/RCO don't have space for the argument string.)
 		//
-		//char* sco_rco_object_args;
 		std::string sco_rco_arg_db_name;
 		bool sco_rco_arg_db_replace;
 		bool sco_rco_arg_db_open;
-		std::string sco_rco_arg_db_key;
+		gdbm_datum_t sco_rco_arg_db_key;
 
 };
 
-#endif
+#endif // _NWNXgdbm_h_

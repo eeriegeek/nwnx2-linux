@@ -21,7 +21,7 @@
 
 ******************************************************************************/
 
-//
+//-----------------------------------------------------------------------------
 // NWN has several structured data types which have native nwscript types.
 // In order to safely store these types persistently in the database, they
 // need to be serialized in a reversible form. Since the passthrough method
@@ -38,19 +38,30 @@
 // 
 // Note that Location saves the area Tag, this means that all areas must be
 // given different tags for this scheme to work reliably.
-//
+//-----------------------------------------------------------------------------
 
-//
-// Interface
+// Indicate an invalid vector type value.
 //
 vector NWNX_VECTOR_INVALID = Vector(-9999999.0f,-9999999.0f,-9999999.0f);
 
+// NWNX_VectorToString - Convert (Serialize) a NWN vector type to a string.
+//
 string NWNX_VectorToString(vector v);
+
+// NWNX_StringToVector - Convert (De-Serialize) a string to a NWN vector type.
+//
 vector NWNX_StringToVector(string s);
 
+// Indicate an invalid location type value.
+//
 location NWNX_LOCATION_INVALID = Location(OBJECT_INVALID,Vector(-9999999.0f,-9999999.0f,-9999999.0f),0.0f);
 
+// NWNX_LocationToString - Convert (Serialize) a NWN location type to a string.
+//
 string NWNX_LocationToString(location m);
+
+// NWNX_StringToVector - Convert (De-Serialize) a string to a NWN location type.
+//
 location NWNX_StringToLocation(string s);
 
 

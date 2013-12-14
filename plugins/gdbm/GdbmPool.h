@@ -1,3 +1,27 @@
+#ifndef _GdbmPool_h_
+#define _GdbmPool_h_
+/******************************************************************************
+
+  GdbmPool.h - Include file for GDBM database file pool.
+
+  Copyright 2013 eeriegeek (eeriegeek@yahoo.com)
+
+  This file is part of NWNX.
+
+  NWNX is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  NWNX is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with NWNX.  If not, see <http://www.gnu.org/licenses/>.
+
+******************************************************************************/
 
 //-----------------------------------------------------------------------------
 // This class implements an open file pooling wrapper around GDBM. A map of
@@ -6,9 +30,6 @@
 // frequently. Wrapper functions also allow automatic file opening if an
 // attempt is made to read/write data to a closed (not yet opened) file.
 //-----------------------------------------------------------------------------
-
-#ifndef _GdbmPool_h_
-#define _GdbmPool_h_
 
 #include <string>
 #include <map>
@@ -62,15 +83,14 @@ class GdbmPool
 		// carry our the requested operation, otherwise it is an error for the database
 		// to be closed. Delete has beend named erase to avoid collision with op delete.
 		//
-		bool store (const char* database_name, const char* key, const char* value, size_t value_size, bool replace = true, bool open = false);
-		bool exists (const char* database_name, const char* key, bool open = false);
-		bool fetch (const char* database_name, const char* key, char** value_ptr, size_t *value_size_ptr, bool open = false);
-		bool erase (const char* database_name, const char* key, bool open = false);
+		bool store (const char* database_name, gdbm_datum_t &key, const char* value, size_t value_size, bool replace = true, bool open = false);
+		bool exists (const char* database_name, gdbm_datum_t &key, bool open = false);
+		bool fetch (const char* database_name, gdbm_datum_t &key, char** value_ptr, size_t *value_size_ptr, bool open = false);
 		bool erase (const char* database_name, gdbm_datum_t &key, bool open = false);
 
 	private:
 
-		// Hide these from use, no implementation.
+		// Hide default construction/copy from use, null implementation.
 		//
 		GdbmPool();
 		GdbmPool(const GdbmPool& other);
@@ -78,16 +98,16 @@ class GdbmPool
 
 		// Database directory where all the gdbm files will reside.
 		//
-		char* gdbm_database_dir;
+		std::string gdbm_database_dir;
 
-		// Configuration options for speed/integrity.
+		// Current process file descriptor limit.
+		//
+		unsigned int open_file_limit;
+
+		// Configuration options for database speed/integrity.
 		//
 		bool sync_write;
 	 	bool lock_file;
-
-		// Buffer to handle gdbm file full pathnames. Will malloc in constructor.
-		//
-		char* tmp_filepath;
 
 		// Maintain a pool of open GDBF files.
 		//
@@ -96,4 +116,3 @@ class GdbmPool
 };
 
 #endif // _GdbmPool_h_
-

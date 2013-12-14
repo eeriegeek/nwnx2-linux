@@ -2,7 +2,7 @@
 
   nwnx_gdbm_aps - NWNX - GDBM Plugin - APS/SQLDB compatibility layer.
 
-  Copyright 2012 eeriegeek (eeriegeek@yahoo.com)
+  Copyright 2012-2013 eeriegeek (eeriegeek@yahoo.com)
 
   This file is part of NWNX.
 
@@ -39,8 +39,6 @@
   expiration so that parameter is ignored. The object parameter is also
   unneccessary for the GDBM methods and is ignored as well.
 
-  TODO: Object handling is not yet implemented.
-
 ******************************************************************************/
 
 void SetPersistentString(object oObject, string sVarName, string sValue, int iExpiration=0, string sTable="pwdata");
@@ -57,59 +55,57 @@ location GetPersistentLocation(object oObject, string sVarName, string sTable="p
 
 void DeletePersistentVariable(object oObject, string sVarName, string sTable = "pwdata");
 
-
 //
 // Implementation
 //
 
 void SetPersistentString(object oObject, string sVarName, string sValue, int iExpiration=0, string sTable="pwdata")
 {
-    NWNX_GdbmStoreString(sTable,sVarName,sValue);
+    NWNX_GDBM_StoreString(sTable,sVarName,sValue);
 }
 void SetPersistentInt(object oObject, string sVarName, int iValue, int iExpiration=0, string sTable="pwdata")
 {
-    NWNX_GdbmStoreInt(sTable,sVarName,iValue);
+    NWNX_GDBM_StoreInt(sTable,sVarName,iValue);
 }
 void SetPersistentFloat(object oObject, string sVarName, float fValue, int iExpiration=0, string sTable="pwdata")
 {
-    NWNX_GdbmStoreFloat(sTable,sVarName,fValue);
+    NWNX_GDBM_StoreFloat(sTable,sVarName,fValue);
 }
 void SetPersistentVector(object oObject, string sVarName, vector vVector, int iExpiration=0, string sTable="pwdata")
 {
-    NWNX_GdbmStoreVector(sTable,sVarName,vVector);
+    NWNX_GDBM_StoreVector(sTable,sVarName,vVector);
 }
 void SetPersistentLocation(object oObject, string sVarName, location lLocation, int iExpiration=0, string sTable="pwdata")
 {
-    NWNX_GdbmStoreLocation(sTable,sVarName,lLocation);
+    NWNX_GDBM_StoreLocation(sTable,sVarName,lLocation);
 }
 string GetPersistentString(object oObject, string sVarName, string sTable="pwdata")
 {
-    return(NWNX_GdbmFetchLocation(sTable,sVarName));
+    return(NWNX_GDBM_FetchLocation(sTable,sVarName));
 }
 int GetPersistentInt(object oObject, string sVarName, string sTable="pwdata")
 {
-    return(NWNX_GdbmFetchInt(sTable,sVarName));
+    return(NWNX_GDBM_FetchInt(sTable,sVarName));
 }
 float GetPersistentFloat(object oObject, string sVarName, string sTable="pwdata")
 {
-    return(NWNX_GdbmFetchFloat(sTable,sVarName));
+    return(NWNX_GDBM_FetchFloat(sTable,sVarName));
 }
 vector GetPersistentVector(object oObject, string sVarName, string sTable="pwdata")
 {
-    return(NWNX_GdbmFetchVector(sTable,sVarName));
+    return(NWNX_GDBM_FetchVector(sTable,sVarName));
 }
 location GetPersistentLocation(object oObject, string sVarName, string sTable="pwdata")
 {
-    return(NWNX_GdbmFetchLocation(sTable,sVarName));
+    return(NWNX_GDBM_FetchLocation(sTable,sVarName));
 }
 
 void DeletePersistentVariable(object oObject, string sVarName, string sTable = "pwdata")
 {
-    NWNX_GdbmOpen(sTable);
-    NWNX_GdbmDeleteString(sTable,sVarName);
-    NWNX_GdbmDeleteInt(sTable,sVarName);
-    NWNX_GdbmDeleteFloat(sTable,sVarName);
-    NWNX_GdbmDeleteVector(sTable,sVarName);
-    NWNX_GdbmDeleteLocation(sTable,sVarName);
+    NWNX_GDBM_DeleteString(sTable,sVarName);
+    NWNX_GDBM_DeleteInt(sTable,sVarName);
+    NWNX_GDBM_DeleteFloat(sTable,sVarName);
+    NWNX_GDBM_DeleteVector(sTable,sVarName);
+    NWNX_GDBM_DeleteLocation(sTable,sVarName);
 }
 
