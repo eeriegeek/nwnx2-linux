@@ -29,6 +29,9 @@ int FileSize (string sFile);
 /* Symlink the file sFrom to sTo. Returns >0 on success. */
 int FileSymlink (string sFrom, string sTo);
 
+/* Get millisecond counter. */
+int GetMilliseconds ();
+
 /* Get the CPU usage values for the current process. */
 struct CPUUsage GetProcessCPUUsage ();
 
@@ -113,6 +116,10 @@ int FileSymlink (string sFrom, string sTo) {
     return StringToInt(GetLocalString(GetModule(), "NWNX!SYSTEM!FILESYMLINK"));
 }
 
+int GetMilliseconds () {
+    SetLocalString(GetModule(), "NWNX!SYSTEM!GETMILLISECONDS", "            ");
+    return StringToInt(GetLocalString(GetModule(), "NWNX!SYSTEM!GETMILLISECONDS"));
+}
 
 struct CPUUsage GetProcessCPUUsage () {
     struct CPUUsage ret;

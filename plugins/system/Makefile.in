@@ -42,7 +42,9 @@ OFILES  = \
     funcs/f_FileDelete.o                         \
     funcs/f_FileReadAll.o                        \
     funcs/f_FileRename.o                         \
+    funcs/f_FileSize.o                           \
     funcs/f_FileSymlink.o                        \
+    funcs/f_GetMilliseconds.o                    \
     funcs/f_GetProcessCPUUsage.o                 \
     funcs/f_GetProcessMemoryUsage.o              \
     funcs/f_GetSystemTime.o                      \

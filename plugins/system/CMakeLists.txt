@@ -15,6 +15,7 @@ add_module(system NWNXSystem plugin-system
 	funcs/f_FileRename
 	funcs/f_FileSize
 	funcs/f_FileSymlink
+	funcs/f_GetMilliseconds
 	funcs/f_GetProcessCPUUsage
 	funcs/f_GetProcessMemoryUsage
 	funcs/f_GetSystemTime

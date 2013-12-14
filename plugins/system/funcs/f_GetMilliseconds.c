@@ -21,17 +21,26 @@
 
 #include "NWNXSystem.h"
 
-void Func_FileSize (CGameObject *ob, char *value)
+#include <sys/time.h>
+
+void Func_GetMilliseconds (CGameObject *ob, char *value)
 {
-
     int ret;
+	struct timeval now;
 
-    struct stat s;
-    if (stat(value,&s)!=0) {
+	// Keeps first call seconds value and subtracts it away on subsequent
+	// calls so int values will not overflow. Result is milliseconds
+	// elapsed since first call. Will overflow int in about 24 days.
+	//
+	static unsigned int first_call_seconds = 0;
+
+	ret = gettimeofday(&now,0);
+	if (ret == -1) {
         ret = -errno;
     } else {
-        ret = s.st_size;
-    }
+		if (first_call_seconds == 0) first_call_seconds = now.tv_sec;
+        ret = ( ( now.tv_sec - first_call_seconds ) * 1000 ) + ( now.tv_usec / 1000 );
+	}
 
     snprintf(value, strlen(value), "%d", ret);
 }

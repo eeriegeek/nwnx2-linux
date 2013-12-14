@@ -41,6 +41,7 @@ FILEREADALL,                            Func_FileReadAll
 FILERENAME,                             Func_FileRename
 FILESIZE,                               Func_FileSize
 FILESYMLINK,                            Func_FileSymlink
+GETMILLISECONDS,                        Func_GetMilliseconds
 GETPROCESSCPUUSAGE,                     Func_GetProcessCPUUsage
 GETPROCESSMEMORYUSAGE,                  Func_GetProcessMemoryUsage
 GETSYSTEMTIME,                          Func_GetSystemTime

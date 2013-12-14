@@ -36,6 +36,7 @@ void Func_FileReadAll                        (CGameObject *ob, char *value);
 void Func_FileRename                         (CGameObject *ob, char *value);
 void Func_FileSize                           (CGameObject *ob, char *value);
 void Func_FileSymlink                        (CGameObject *ob, char *value);
+void Func_GetMilliseconds                    (CGameObject *ob, char *value);
 void Func_GetProcessCPUUsage                 (CGameObject *ob, char *value);
 void Func_GetProcessMemoryUsage              (CGameObject *ob, char *value);
 void Func_GetSystemTime                      (CGameObject *ob, char *value);
