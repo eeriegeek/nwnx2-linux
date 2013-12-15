@@ -4,19 +4,24 @@ LFLAGS   = $(PLUGIN_LFLAGS)
 
 LIBS     = -lgdbm
 
-all: nwnx_gdbm.so gdbm2dump
+all: nwnx_gdbm.so gdbm2dump 
 
-nwnx_gdbm.so: NWNXgdbm.o plugin-gdbm.o
+nwnx_gdbm.so: GdbmPool.o NWNXgdbm.o plugin-gdbm.o
 	$(CXX) $(LFLAGS) -o $@ $^ $(LIBS)
 
 gdbm2dump: gdbm2dump.cpp
 	$(CXX) -o $@ $^ $(LIBS)
+	cp -p gdbm2dump dump2gdbm
+
+test_gdbmpool: test_gdbmpool.cpp
+	$(CXX) -o $@ $^ $(LIBS)
 
 clean:
-	/bin/rm -f *.o *.so *~ gdbm2dump
+	/bin/rm -f *.o *.so *~ gdbm2dump dump2gdbm test_gdbmpool
 
 distclean: clean
 	/bin/rm -f Makefile
 
 install: nwnx_gdbm.so gdbm2dump
 	mkdir -p @prefix@/ ; install nwnx_gdbm.so @prefix@/
+

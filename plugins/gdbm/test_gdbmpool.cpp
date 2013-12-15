@@ -31,20 +31,20 @@ void TEST_DB()
 {
 	printf("TEST: *** Database Maintenance ***\n");
 	{
-	GdbmPool gp("./db",true,false);
+	GdbmPool gp(".",true,false);
 	gp.create("test_db_01",false);
 	gp.reorganize("test_db_01");
 	gp.destroy("test_db_01"); // should warn
 	}
 	printf("TEST: ***\n");
 	{
-	GdbmPool gp("./db",false,true);
+	GdbmPool gp(".",false,true);
 	gp.create("test_db_01",false);
 	// should auto close
 	}
 	printf("TEST: ***\n");
 	{
-	GdbmPool gp("./db",true,false);
+	GdbmPool gp(".",true,false);
 	gp.create("test_db_01",true); // should truncate
 	gp.reorganize("test_db_01");
 	gp.close("test_db_01");
@@ -58,7 +58,7 @@ void TEST_DM()
 {
 	printf("TEST: *** Data Manipulation ***\n");
 
-	GdbmPool gp("./db",true,false);
+	GdbmPool gp(".",true,false);
 	char* tk1_s = "TestKey1"; gdbm_datum_t tk1 (tk1_s,tk1_s+strlen(tk1_s));
 	char* tk2_s = "TestKey2"; gdbm_datum_t tk2 (tk2_s,tk2_s+strlen(tk2_s));
 	char* tk3_s = "TestKey3"; gdbm_datum_t tk3 (tk3_s,tk3_s+strlen(tk3_s));
@@ -94,6 +94,7 @@ void TEST_DM()
 	printf("TEST: ***\n");
 	
 	// try to op without open -> error
+	printf("TEST: expect 4 errors\n");
 	gp.store("test_db_02", tk1, tv1_s, strlen(tv1_s)+1);
 	gp.exists("test_db_02",tk1);
 	gp.fetch("test_db_02",tk1,&foo,&foo_size);

@@ -29,13 +29,13 @@ PLUGINLINK *pluginLink = NULL;
 
 PLUGININFO pluginInfo={
 	sizeof(PLUGININFO),
-	"NWNX-GDBM",
+	const_cast<char*>("NWNX-GDBM"),
 	PLUGIN_MAKE_VERSION(2,0,0,0),
-	"NWNX plugin for GNU DBM database support",
-	"eeriegeek",
-	"eeriegeek@yahoo.com",
-	"Copyright 2012-1013 eeriegeek, GNU General Public License",
-	"http://nwnx.org",
+	const_cast<char*>("NWNX plugin for GNU DBM database support"),
+	const_cast<char*>("eeriegeek"),
+	const_cast<char*>("eeriegeek@yahoo.com"),
+	const_cast<char*>("Copyright 2012-1013 eeriegeek, GNU General Public License"),
+	const_cast<char*>("http://nwnx.org"),
 	0
 };
 
