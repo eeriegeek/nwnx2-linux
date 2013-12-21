@@ -145,7 +145,7 @@ char *SaveObject(dword nObjectID, int &nSize)
 		if(CResGFF__CreateGFFFile(pGFF, pResStruct, sType, sVersion)){
 			odbc.Log(4, "CResGFF__CreateGFFFile - done\n");
 			if(SaveObjectInternal(pObject, pGFF, pResStruct)){
-				odbc.Log(4, "CNWSPlaceable__SavePlaceable - done\n");
+				odbc.Log(4, "CNWSPlaceable__SavePlaceable/CNWSStore__SaveStore/CNWSTrigger__SaveTrigger - done\n");
 				//TODO: Save object state / Load var table
 				CNWSObject__SaveVarTable(pObject, pGFF, pResStruct);
 				void *pData;
@@ -339,7 +339,7 @@ dword LoadObject(const char *pData, int nSize, Location lLocation)
 	}
 	else if(sType == "UTT ")
 	{
-		odbc.Log(4, "Loading store...\n");
+		odbc.Log(4, "Loading trigger...\n");
 		CNWSTrigger *pObject = new CNWSTrigger;
 		CNWSTrigger__CNWSTrigger(pObject, 0x7F000000);
 		odbc.Log(4, "CNWSTrigger__CNWSTrigger - done\n");

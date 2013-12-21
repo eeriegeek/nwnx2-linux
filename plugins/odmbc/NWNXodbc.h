@@ -58,6 +58,12 @@ protected:
 	bool LoadConfiguration ();
 
 private:
+	char* SaveObjectRequest(char* Parameters);
+	char* LoadObjectRequest(char* Parameters);
+	void SaveObjectAndNotifyPlugin(unsigned int nObjectId, const char* sPlugin);
+	void NotifyPluginAndLoadObject(const char* sPlugin, unsigned int nAreaId, float x, float y, float z, float fFacing);
+
+
   CDB* db;
 	enum EDBType {dbNONE, dbODBC, dbMYSQL, dbSQLITE, dbPGSQL};
 	int dbType;
@@ -79,6 +85,8 @@ private:
 	bool bReconnectOnError;
 	char* scorcoSQL;
 	unsigned long lastObjectID;
+	unsigned char* lastObject;
+	unsigned int lastObjectSize;
 
 	HANDLE hSCOEvent;
 	HANDLE hRCOEvent;
