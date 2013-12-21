@@ -114,7 +114,7 @@ int NWNX_GDBM_Delete(string sDbName, string sKey, int bOpen = TRUE);
 // Each method converts to/from a specific NWN data type for storage as a
 // string in GDBM. The data are stored with a type specific key, so e.g. Int
 // and Vector are not confused in the database and a String named "foo" is
-// different than a float named "foo". 
+// different than a float named "foo".
 //-----------------------------------------------------------------------------
 
 int NWNX_GDBM_StoreString(string sDbName, string sKey, string sValue, int bReplace = TRUE, int bOpen = TRUE);
@@ -146,7 +146,7 @@ int NWNX_GDBM_DeleteLocation(string sDbName, string sKey, int bOpen = TRUE);
 int NWNX_GDBM_DeleteObject(string sDbName, string sKey, int bOpen = TRUE);
 
 //----------------------------------------------------------------------------
-// Implementation 
+// Implementation
 //-----------------------------------------------------------------------------
 
 const string NWNX_GDBM_ARGSEP = "";
@@ -258,20 +258,16 @@ int NWNX_GDBM_StoreObject(string sDbName, string sKey, object oValue, int bRepla
     switch (GetObjectType(oValue)) {
         case OBJECT_TYPE_ITEM:
         case OBJECT_TYPE_CREATURE:
-	        retVal = StoreCampaignObject("NWNX", "GDBM", oValue);
+            retVal = StoreCampaignObject("NWNX", "GDBM", oValue);
             break;
         case OBJECT_TYPE_PLACEABLE:
         case OBJECT_TYPE_STORE:
         case OBJECT_TYPE_TRIGGER:
-            // TODO: Under construction, may need patch to ODMBC
-            //StoreCampaignObject("NWNX","F",oObject);
-            //SetLocalString(GetModule(),"NWNX!DB!OBJ_FREEZE",ObjectToString(oObject));
-            //SetLocalString(GetModule(), "NWNX!ODBC!STOREOBJECT", ObjectToString(oObject));
-
-            //SetLocalString(GetModule(), "NWNX!ODBC!SAVEOBJECT", "GDBMÂ¬" + ObjectToString(oObject));
+            SetLocalString(GetModule(), "NWNX!ODBC!SAVEOBJECT", ObjectToString(oValue)+"¬GDBM");
+            retVal = 1;
             break;
     }
-    return retVal; 
+    return retVal;
 }
 
 int NWNX_GDBM_ExistsString(string sDbName, string sKey, int bOpen = TRUE)
@@ -322,26 +318,51 @@ location NWNX_GDBM_FetchLocation(string sDbName, string sKey, int bOpen = TRUE)
 object NWNX_GDBM_FetchObject(string sDbName, string sKey, location mDestination, object oDestination, int bOpen = TRUE)
 {
     object oReturn = OBJECT_INVALID;
-    SetLocalString(GetModule(), "NWNX!GDBM!SETOBJARG", sDbName + NWNX_GDBM_ARGSEP + "0" + NWNX_GDBM_ARGSEP + (bOpen?"1":"0") + NWNX_GDBM_ARGSEP + (sKey+NWNX_GDBM_KEYSEP+"O"));
+    SetLocalString(
+        GetModule(),
+        "NWNX!GDBM!SETOBJARG",
+        sDbName + NWNX_GDBM_ARGSEP + "0" + NWNX_GDBM_ARGSEP + (bOpen?"1":"0") + NWNX_GDBM_ARGSEP + (sKey+NWNX_GDBM_KEYSEP+"O")
+    );
+    oReturn = RetrieveCampaignObject("NWNX", "GDBM", mDestination, oDestination, OBJECT_INVALID);
+    // The handler for RCO will run the retrieval without knowing the
+    // type of the object, if not an item or creature, it caches the
+    // object and LOADOBJECT must be called to et it.
+    if ( oReturn == OBJECT_INVALID ) {
+        vector vLocation = GetPositionFromLocation(mDestination);
+        SetLocalString(
+            GetModule(),
+            "NWNX!ODBC!LOADOBJECT",
+            ObjectToString(GetAreaFromLocation(mDestination))+"¬"+
+            FloatToString(vLocation.x)+"¬"+FloatToString(vLocation.y)+"¬"+FloatToString(vLocation.z)+"¬"+
+            FloatToString(GetFacingFromLocation(mDestination))+"¬"+
+            "GDBM"
+        );
+        oReturn = GetLocalObject(GetModule(), "NWNX!ODBC!RETRIEVEOBJECT");
+    }
+/*
+    // Alternative, the object type must be specified by caller
     int nObjectType = OBJECT_TYPE_ITEM;
     switch (nObjectType) {
         case OBJECT_TYPE_ITEM:
         case OBJECT_TYPE_CREATURE:
-	        oReturn = RetrieveCampaignObject("NWNX", "GDBM", mDestination, oDestination, OBJECT_INVALID);
+            oReturn = RetrieveCampaignObject("NWNX", "GDBM", mDestination, oDestination, OBJECT_INVALID);
             break;
         case OBJECT_TYPE_PLACEABLE:
         case OBJECT_TYPE_STORE:
         case OBJECT_TYPE_TRIGGER:
-            // TODO: Under construction
-            //SetLocalString(GetModule(), "NWNX!ODBC!WRITEOBJECT", ObjectToString(oObject));
-            //SetLocalString(GetModule(), "NWNX!ODBC!RETRIEVEOBJECT", ObjectToString(GetAreaFromLocation(lLocation))+"Â¬"+FloatToString(vLocation.x)+"Â¬"+FloatToString(vLocation.y)+"Â¬"+FloatToString(vLocation.z)+"Â¬"+FloatToString(GetFacingFromLocation(lLocation)));
-            //oReturn = GetLocalObject(GetModule(), "NWNX!ODBC!RETRIEVEOBJECT");
-
-            //SetLocalString(GetModule(), "NWNX!ODBC!LOADOBJECT", ObjectToString(GetAreaFromLocation(mDestination))+"Â¬"+FloatToString(vLocation.x)+"Â¬"+FloatToString(vLocation.y)+"Â¬"+FloatToString(vLocation.z)+"Â¬"+FloatToString(GetFacingFromLocation(lLocation)));
-            //oReturn = GetLocalObject(GetModule(), "NWNX!ODBC!LOADOBJECT", "GDBMÂ¬" + ObjectToString(oObject));
+            vector vLocation = GetPositionFromLocation(mDestination);
+            SetLocalString(
+                GetModule(),
+                "NWNX!ODBC!LOADOBJECT",
+                ObjectToString(GetAreaFromLocation(mDestination))+"¬"+
+                FloatToString(vLocation.x)+"¬"+FloatToString(vLocation.y)+"¬"+FloatToString(vLocation.z)+"¬"+
+                FloatToString(GetFacingFromLocation(mDestination))+"¬"+
+                "GDBM"
+            );
+            oReturn = GetLocalObject(GetModule(), "NWNX!ODBC!RETRIEVEOBJECT");
             break;
     }
-
+*/
     return oReturn;
 }
 

@@ -164,10 +164,10 @@ bool CNWNXgdbm::OnCreate (gline *config, const char* LogDir)
 	//
 	gdbmpool = new GdbmPool(cfg_filepath, cfg_sync_write, cfg_lock_file);
 
-	// This plugin depends on the SCO/RCO services registerd by the ODMBC
-	// driver. Because of this dependency, this event callback is used
-	// to ensure that our (the GDBM) callbacks are only registerd after
-	// the ODMBC service is available.
+	// This plugin depends on the SCO/RCO services registered by the ODMBC
+	// plugin. Because of this dependency, the NWNX/Core/PluginsLoaded 
+	// event callback is used to ensure that our (the GDBM) callbacks are
+	// only registerd after the ODMBC service is available.
 	//
 	if ( cfg_use_scorco ) {
 		HANDLE handlePluginsLoaded = HookEvent("NWNX/Core/PluginsLoaded", PluginsLoaded_EventHandler);
@@ -187,16 +187,16 @@ char* CNWNXgdbm::OnRequest (char* gameObject, char* Request, char* Parameters)
 	Log(3,"D: --- REQUEST ---\n");
 	Log(3,"D: OnRequest: Request [%#0.8x][%s], Parameters [%#0.8x][%s]\n", Request, Request, Parameters, Parameters);
 
-		 if (strcmp(Request,"FETCH"	    )==0) pResult = Fetch(gameObject,Parameters);
-	else if (strcmp(Request,"STORE"	    )==0) pResult = Store(gameObject,Parameters);
-	else if (strcmp(Request,"EXISTS"	)==0) pResult = Exists(gameObject,Parameters);
-	else if (strcmp(Request,"DELETE"	)==0) pResult = Delete(gameObject,Parameters);
+		 if (strcmp(Request,"FETCH"     )==0) pResult = Fetch(gameObject,Parameters);
+	else if (strcmp(Request,"STORE"     )==0) pResult = Store(gameObject,Parameters);
+	else if (strcmp(Request,"EXISTS"    )==0) pResult = Exists(gameObject,Parameters);
+	else if (strcmp(Request,"DELETE"    )==0) pResult = Delete(gameObject,Parameters);
 	else if (strcmp(Request,"SETOBJARG" )==0) pResult = SetObjectArguments(gameObject,Parameters);
-	else if (strcmp(Request,"OPEN"	    )==0) pResult = Open(gameObject,Parameters);
-	else if (strcmp(Request,"SYNC"	    )==0) pResult = Sync(gameObject,Parameters);
-	else if (strcmp(Request,"CLOSE"	    )==0) pResult = Close(gameObject,Parameters);
+	else if (strcmp(Request,"OPEN"      )==0) pResult = Open(gameObject,Parameters);
+	else if (strcmp(Request,"SYNC"      )==0) pResult = Sync(gameObject,Parameters);
+	else if (strcmp(Request,"CLOSE"     )==0) pResult = Close(gameObject,Parameters);
 	else if (strcmp(Request,"CLOSEALL"  )==0) pResult = CloseAll(gameObject,Parameters);
-	else if (strcmp(Request,"CREATE"	)==0) pResult = Create(gameObject,Parameters);
+	else if (strcmp(Request,"CREATE"    )==0) pResult = Create(gameObject,Parameters);
 	else if (strcmp(Request,"REORGANIZE")==0) pResult = Reorganize(gameObject,Parameters);
 	else if (strcmp(Request,"DESTROY"   )==0) pResult = Destroy(gameObject,Parameters);
 	else { 

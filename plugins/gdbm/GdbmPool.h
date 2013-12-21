@@ -53,14 +53,15 @@ class GdbmPool
 {
 	public:
 
-		// Construct the GdbmPool giving a bas directory in which all the gdbm files will
-		// reside. The option sync_write can be turned off for a slight performance gain
-		// at increased file corruption risk. The option lock_file can be turned on if
-		// there may be other potential writers attempting to access the files.
+		// Construct the GdbmPool given a base directory in which all the gdbm
+		// files will reside. The option sync_write can be turned off for a
+		// performance gain at increased file corruption risk. The option
+		// lock_file can be turned on if there may be other potential writers
+		// attempting to access the files.
 		//
 		GdbmPool(const char* gdbm_database_dir, bool sync_write = true, bool lock_file = false);
 
-		// Destorys the GdbmPool, closes all open gdbm files and frees buffers.
+		// Destroys the GdbmPool, closes all open gdbm files and frees buffers.
 		//
 		virtual ~GdbmPool();
 
@@ -77,11 +78,13 @@ class GdbmPool
 		void close (const char* database_name);
 		void close_all ();
 
-		// Basic DML type operations. Each of these specifies a key as a null terminated
-		// string (no nulls in key.)  Each method also has an open flag, if open==true,
-		// the method will attempt to open the named database in read-write mode and
-		// carry our the requested operation, otherwise it is an error for the database
-		// to be closed. Delete has beend named erase to avoid collision with op delete.
+		// Basic data manipulation type operations. Each of these methods
+		// specifies a key as a null terminated string (no nulls in key.)
+		// Each method also has an open flag. If open==true the method will
+		// attempt to open the named database in read-write mode and carry
+		// out the requested operation, otherwise it is an error for the
+		// database to be closed. Delete has been named erase to avoid name
+		// collision with C++ op delete.
 		//
 		bool store (const char* database_name, gdbm_datum_t &key, const char* value, size_t value_size, bool replace = true, bool open = false);
 		bool exists (const char* database_name, gdbm_datum_t &key, bool open = false);
@@ -100,14 +103,14 @@ class GdbmPool
 		//
 		std::string gdbm_database_dir;
 
-		// Current process file descriptor limit.
+		// The current process's file descriptor soft limit.
 		//
 		unsigned int open_file_limit;
 
 		// Configuration options for database speed/integrity.
 		//
 		bool sync_write;
-	 	bool lock_file;
+		bool lock_file;
 
 		// Maintain a pool of open GDBF files.
 		//

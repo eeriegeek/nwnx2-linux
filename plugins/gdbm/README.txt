@@ -1,11 +1,13 @@
-README:
+README
+------
 
 This NWNX plugin provides a wrapper to the Gnu DBM (GDBM) database library.
 GDBM is a simple hash indexed key-value pair flat file database that accepts arbitrary data for both the key and the value.
 In addition to access to the basic GDBM database methods this plugin maintains a pool of open gdbm files for increased performance.
 The plugin also provides methods for creation, deletion, and maintenance of GDMB database files.
 
-Purpose:
+Purpose
+-------
 
 This plugin implements an interface to a fast, reliable file based key-value database.
 It's architectural role is analogous to the Bioware campaign database.
@@ -44,7 +46,8 @@ The basic Campaign functions allow storage of Items and Creatures, this plugin a
 Storable types have been expanded in NWNX by virusman to include Placeables, Merchants and Triggers.
 This GDBM plugin will use the extend plugin API to provide support for storage of these additional object types when available.
 
-Installation:
+Installation
+------------
 
 Unpack the plugin in the NWNX plugins directory.
 Make sure you have the GDBM normal and development packages installed on your system.
@@ -65,7 +68,8 @@ This means that a version (any version) of the ODMBC plugin must be built and in
 It should not be necessary to even configure the database plugin, it just needs to be present to load.
 The SQLite version is probably the easist to build if there are any problems.
 
-Configuration:
+Configuration
+-------------
 
 This plugin has several configuration options.
 It operates with defaults that should work fine for most purposes, thus does not strictly require a config section in nwnx2.ini.
@@ -84,7 +88,8 @@ use_scorco = 1
 
 Note that the GDBM plugin can be used concurrently with either (or both) the Bioware campaign database and any of the odbmc (mysql/pgsql/sqlite) plugins.
 
-Usage:
+Usage
+-----
 
 A set of NWN include scripts can be found in the nwn subdirectory of this plugin:
 
@@ -95,7 +100,8 @@ nwnx_gdbm_camp.nss : Functions to emulate the Campaign Database interface
 There are additional usage notes in the script files themselves.
 An erf, nwnx_gdbm_inc.erf is included containing only the listed scripts for easy importation.
 
-Performance:
+Performance
+-----------
 
 GDBM is a hashed index flat file database analogous to the DBF file implementation used by Bioware in the campaign database.
 As such, its general performance characteristics will be similar.
@@ -103,13 +109,15 @@ In testing the GDBM implementation appears to be considerably faster than the ca
 Its on disk file size is smaller than the campaign database files as well.
 For smaller datasets (up to a few 1000 rows), GDBM performance is comparable and sometimes faster than SQL server configurations.
 
-Tools:
+Tools
+-----
 
 The GDBM release has several tools for working with GDMB files, however they are not always built and installed by OS packagers.
 This plugin contains a utility programs "gdbm2dump" and "dump2gdbm" which dump a gdbm file to a flat file and convert the flat file back to a GDBM database.
 The flat file is structured to be readable, and can be modified with care for testing and major database repairs.
 
-Future:
+Future
+------
 
 Pool limiting
 Currently there is no finite limit to the pool map size.
@@ -122,7 +130,8 @@ Implement iterator functions.
 The GDBM interface allows iteration through all the key-value pairs in a database.
 A datum iterator is included in the GDBM node structure future support for this if it seems useful.
 
-Credits:
+Credits
+-------
 
 Many thanks to virusman, papillon, dumbo, and all the others who made and continue to make NWNX possible.
 
